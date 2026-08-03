@@ -68,6 +68,25 @@ flutter:
       fonts:
         - asset: fonts/DSEG7Classic-Bold.ttf
           weight: 700
+    - family: NDot
+      fonts:
+        - asset: fonts/ndot-47-inspired-by-nothing.otf
+    - family: Orbitron
+      fonts:
+        - asset: fonts/Orbitron-Variable.ttf
+    - family: Oxanium
+      fonts:
+        - asset: fonts/Oxanium-Variable.ttf
+    - family: Nabla
+      fonts:
+        - asset: fonts/Nabla-Variable.ttf
+    - family: BitcountInk
+      fonts:
+        - asset: fonts/BitcountInk-Variable.ttf
+    - family: SairaCondensed
+      fonts:
+        - asset: fonts/SairaCondensed-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

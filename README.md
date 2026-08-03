@@ -9,7 +9,8 @@ true-black AMOLED-friendly background. The screen stays on via
 ## Gestures
 
 - **Tap** — cycle digit colour (red / amber / green / cyan / white)
-- **Swipe left / right** — change clock font (Roboto / Doto dot-matrix / DSEG7 7-segment)
+- **Swipe left / right** — cycle clock styles: 9 fonts plus 3 fun faces
+  (flip clock, dash burst, analog)
 - **Swipe up / down** — brighter / dimmer
 - **Long-press** — toggle 12/24-hour
 - **Double-tap** — show/hide seconds
@@ -21,16 +22,28 @@ at the bottom.
 
 ## Fonts
 
-The big digits cycle through three faces:
+Swiping cycles through nine fonts:
 
 - **Roboto** — system default
-- **Doto** — round dot-matrix in the Nothing phone style (SIL OFL, Google Fonts)
+- **NDot 47** — "inspired by Nothing" community dot-matrix font
+- **Doto** — round dot-matrix in the same style (SIL OFL, Google Fonts)
 - **DSEG7 Classic** — classic 7-segment digital clock (SIL OFL, by Keshikan)
+- **Orbitron** — geometric sci-fi (SIL OFL, Google Fonts)
+- **Oxanium** — squared tech face (SIL OFL, Google Fonts)
+- **Nabla** — 3D colour font; paints its own colours, so the theme tint
+  doesn't apply (SIL OFL, Google Fonts)
+- **Bitcount Ink** — pixel dot-matrix (SIL OFL, Google Fonts)
+- **Saira Condensed** — tall condensed sans (SIL OFL, Google Fonts)
 
-The bundled fonts and their licenses live in `fonts/`. Nothing's real NDot
-font is proprietary, so the OFL-licensed Doto stands in; if you own NDot,
-drop its TTF into `fonts/` and point the `Doto` family at it in
-`pubspec.yaml`.
+…then three fun faces:
+
+- **Flip clock** — split-flap cards that fold down on each minute change
+- **Dash burst** — stacked digits ringed by radiating dashes, date on top
+- **Analog** — minimal face with radial ticks, 12/3/6/9 numerals, and the
+  date beside the centre
+
+The bundled fonts and their licenses live in `fonts/`. NDot 47 is a fan
+recreation distributed for free; the OFL fonts include their license texts.
 
 ## Battery
 
