@@ -41,13 +41,40 @@ class ClockScreen extends StatefulWidget {
   State<ClockScreen> createState() => _ClockScreenState();
 }
 
-class _ClockScreenState extends State<ClockScreen> {
+class _FontSpec {
+  const _FontSpec({
+    this.family,
+    this.scale = 1.0,
+    this.height = 0.85,
+    this.tracking = -0.02,
+    this.variations,
+  });
+
+  final String? family; // null = platform default (Roboto)
+  final double scale; // size multiplier so every font fills similarly
+  final double height;
+  final double tracking; // letter spacing as a fraction of font size
+  final List<FontVariation>? variations;
+}
+
+class _ClockScreenState extends State<ClockScreen>
+    with WidgetsBindingObserver {
   static const _themes = [
     Color(0xFFFF453A), // red
     Color(0xFFFF9F0A), // amber
     Color(0xFF30D158), // green
     Color(0xFF64D2FF), // cyan
     Color(0xFFE8E8E8), // white
+  ];
+  static const _fonts = [
+    _FontSpec(), // Roboto
+    _FontSpec(
+      family: 'Doto', // Nothing-style round dot matrix
+      scale: 0.95,
+      tracking: 0,
+      variations: [FontVariation('ROND', 100), FontVariation('wght', 800)],
+    ),
+    _FontSpec(family: 'DSEG7', scale: 0.78, height: 1.0, tracking: 0.04),
   ];
   static const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const _months = [
@@ -56,6 +83,7 @@ class _ClockScreenState extends State<ClockScreen> {
   ];
 
   int _themeIndex = 0;
+  int _fontIndex = 0;
   double _dim = 0.55;
   bool _use24h = false;
   bool _showSeconds = false;
@@ -76,24 +104,10 @@ class _ClockScreenState extends State<ClockScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WakelockPlus.enable().catchError((_) {});
     _loadSettings();
-
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() => _now = DateTime.now());
-    });
-
-    // AMOLED burn-in protection: drift the clock a few pixels every minute.
-    _driftTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      setState(() {
-        _drift = Offset(
-          _random.nextDouble() * 16 - 8,
-          _random.nextDouble() * 28 - 14,
-        );
-      });
-      _updateBatteryLevel();
-    });
-
+    _startTimers();
     _updateBatteryLevel();
     _batterySub = _battery.onBatteryStateChanged.listen((state) {
       setState(() {
@@ -108,6 +122,52 @@ class _ClockScreenState extends State<ClockScreen> {
     });
   }
 
+  void _startTimers() {
+    _scheduleTick();
+    // AMOLED burn-in protection: shift the clock a few pixels every minute.
+    _driftTimer?.cancel();
+    _driftTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      setState(() {
+        _drift = Offset(
+          _random.nextDouble() * 80 - 40,
+          _random.nextDouble() * 40 - 20,
+        );
+      });
+      _updateBatteryLevel();
+    });
+  }
+
+  void _stopTimers() {
+    _tick?.cancel();
+    _driftTimer?.cancel();
+  }
+
+  // Redraw only at the next second or minute boundary — with seconds hidden
+  // the clock renders one frame per minute instead of one per second.
+  void _scheduleTick() {
+    _tick?.cancel();
+    final now = DateTime.now();
+    final delayMs = _showSeconds
+        ? 1000 - now.millisecond
+        : (60 - now.second) * 1000 - now.millisecond;
+    _tick = Timer(Duration(milliseconds: delayMs + 50), () {
+      setState(() => _now = DateTime.now());
+      _scheduleTick();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      setState(() => _now = DateTime.now());
+      _startTimers();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      // Not visible — stop burning CPU on clock updates.
+      _stopTimers();
+    }
+  }
+
   Future<void> _loadSettings() async {
     try {
       _prefs = await SharedPreferences.getInstance();
@@ -116,15 +176,18 @@ class _ClockScreenState extends State<ClockScreen> {
     }
     if (!mounted) return;
     setState(() {
-      _themeIndex = _prefs!.getInt('theme') ?? 0;
+      _themeIndex = (_prefs!.getInt('theme') ?? 0) % _themes.length;
+      _fontIndex = (_prefs!.getInt('font') ?? 0) % _fonts.length;
       _dim = _prefs!.getDouble('dim') ?? 0.55;
       _use24h = _prefs!.getBool('use24h') ?? false;
       _showSeconds = _prefs!.getBool('seconds') ?? false;
     });
+    _scheduleTick(); // Cadence depends on whether seconds are shown.
   }
 
   void _saveSettings() {
     _prefs?.setInt('theme', _themeIndex);
+    _prefs?.setInt('font', _fontIndex);
     _prefs?.setDouble('dim', _dim);
     _prefs?.setBool('use24h', _use24h);
     _prefs?.setBool('seconds', _showSeconds);
@@ -220,8 +283,8 @@ class _ClockScreenState extends State<ClockScreen> {
 
   @override
   void dispose() {
-    _tick?.cancel();
-    _driftTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _stopTimers();
     _batterySub?.cancel();
     WakelockPlus.disable().catchError((_) {});
     super.dispose();
@@ -250,6 +313,7 @@ class _ClockScreenState extends State<ClockScreen> {
         onDoubleTap: () => setState(() {
           _showSeconds = !_showSeconds;
           _saveSettings();
+          _scheduleTick();
         }),
         onLongPress: () => setState(() {
           _use24h = !_use24h;
@@ -259,17 +323,27 @@ class _ClockScreenState extends State<ClockScreen> {
           _dim = (_dim - details.delta.dy / 600).clamp(0.15, 1.0);
         }),
         onVerticalDragEnd: (_) => _saveSettings(),
+        onHorizontalDragEnd: (details) => setState(() {
+          final velocity = details.primaryVelocity ?? 0;
+          _fontIndex = velocity < 0
+              ? (_fontIndex + 1) % _fonts.length
+              : (_fontIndex + _fonts.length - 1) % _fonts.length;
+          _saveSettings();
+        }),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final w = constraints.maxWidth;
             final h = constraints.maxHeight;
             final digitSize = min(w * 0.185, h * 0.50);
+            final font = _fonts[_fontIndex];
             final digitStyle = TextStyle(
               color: color,
-              fontSize: digitSize,
+              fontFamily: font.family,
+              fontSize: digitSize * font.scale,
               fontWeight: FontWeight.w700,
-              height: 0.85,
-              letterSpacing: -digitSize * 0.02,
+              height: font.height,
+              letterSpacing: digitSize * font.tracking,
+              fontVariations: font.variations,
               fontFeatures: const [FontFeature.tabularFigures()],
             );
             final smallStyle = TextStyle(
@@ -278,10 +352,10 @@ class _ClockScreenState extends State<ClockScreen> {
               letterSpacing: digitSize * 0.012,
             );
 
-            return AnimatedContainer(
-              duration: const Duration(seconds: 2),
-              curve: Curves.easeInOut,
-              transform: Matrix4.translationValues(_drift.dx, _drift.dy, 0),
+            // A plain translate: the drift jump costs one frame, where an
+            // animated slide would render ~120 frames every minute.
+            return Transform.translate(
+              offset: _drift,
               child: Opacity(
                 opacity: _dim,
                 child: Stack(
@@ -339,7 +413,7 @@ class _ClockScreenState extends State<ClockScreen> {
                       Positioned(
                         left: 0,
                         right: 0,
-                        bottom: h * 0.03,
+                        bottom: h * 0.05,
                         child: Text(
                           '${_charging ? '⚡ ' : ''}$_batteryLevel%',
                           textAlign: TextAlign.center,
@@ -355,7 +429,7 @@ class _ClockScreenState extends State<ClockScreen> {
                         right: 0,
                         top: h * 0.04,
                         child: Text(
-                          'tap: colour  ·  hold: 12/24h\ndouble-tap: seconds  ·  swipe: dim',
+                          'tap: colour  ·  hold: 12/24h  ·  double-tap: seconds\nswipe up/down: dim  ·  swipe left/right: font',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.35),
