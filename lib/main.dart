@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -403,6 +404,23 @@ class _ClockScreenState extends State<ClockScreen>
   bool _use24h = false;
   bool _showSeconds = false;
 
+  // The swipe dimmer runs in two stages, because panel brightness — not pixel
+  // opacity — is what actually costs battery. The top of the range walks the
+  // panel down to its hardware floor; only once there does the bottom of the
+  // range fade the pixels, which is the sole way to get dimmer than the floor.
+  static const _panelFloor = 0.4;
+  static const _minOpacity = 0.12;
+
+  double get _panelBrightness => _dim <= _panelFloor
+      ? 0.0
+      : (_dim - _panelFloor) / (1 - _panelFloor);
+
+  double get _pixelOpacity => _dim >= _panelFloor
+      ? 1.0
+      : _minOpacity + (_dim / _panelFloor) * (1 - _minOpacity);
+
+  double _appliedBrightness = -1;
+
   DateTime _now = DateTime.now();
   Offset _drift = Offset.zero;
   int _batteryLevel = -1;
@@ -421,6 +439,11 @@ class _ClockScreenState extends State<ClockScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WakelockPlus.enable().catchError((_) {});
+    // The brightness override needs an attached activity, which isn't there
+    // yet during initState — wait for the first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _applyBrightness(force: true);
+    });
     _loadSettings();
     _startTimers();
     _updateBatteryLevel();
@@ -476,10 +499,13 @@ class _ClockScreenState extends State<ClockScreen>
     if (state == AppLifecycleState.resumed) {
       setState(() => _now = DateTime.now());
       _startTimers();
+      // Android drops the window override on backgrounding; re-assert it.
+      _applyBrightness(force: true);
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       // Not visible — stop burning CPU on clock updates.
       _stopTimers();
+      _resetBrightness();
     }
   }
 
@@ -493,11 +519,12 @@ class _ClockScreenState extends State<ClockScreen>
     setState(() {
       _themeIndex = (_prefs!.getInt('theme') ?? 0) % _themes.length;
       _fontIndex = (_prefs!.getInt('font') ?? 0) % _fonts.length;
-      _dim = _prefs!.getDouble('dim') ?? 0.55;
+      _dim = (_prefs!.getDouble('dim') ?? 0.55).clamp(0.0, 1.0);
       _use24h = _prefs!.getBool('use24h') ?? false;
       _showSeconds = _prefs!.getBool('seconds') ?? false;
     });
     _scheduleTick(); // Cadence depends on whether seconds are shown.
+    _applyBrightness();
   }
 
   void _saveSettings() {
@@ -691,6 +718,28 @@ class _ClockScreenState extends State<ClockScreen>
     return Column(mainAxisSize: MainAxisSize.min, children: rows);
   }
 
+  // Window-level brightness: no WRITE_SETTINGS permission, and the system
+  // brightness the user set elsewhere is left untouched.
+  Future<void> _applyBrightness({bool force = false}) async {
+    final target = _panelBrightness;
+    if (!force && (target - _appliedBrightness).abs() < 0.01) return;
+    try {
+      await ScreenBrightness().setApplicationScreenBrightness(target);
+      _appliedBrightness = target; // Only on success, so a failed call...
+    } catch (_) {
+      _appliedBrightness = -1; // ...retries instead of being skipped forever.
+    }
+  }
+
+  Future<void> _resetBrightness() async {
+    _appliedBrightness = -1;
+    try {
+      await ScreenBrightness().resetApplicationScreenBrightness();
+    } catch (_) {
+      // Nothing to restore.
+    }
+  }
+
   Future<void> _updateBatteryLevel() async {
     try {
       final level = await _battery.batteryLevel;
@@ -705,6 +754,7 @@ class _ClockScreenState extends State<ClockScreen>
     WidgetsBinding.instance.removeObserver(this);
     _stopTimers();
     _batterySub?.cancel();
+    _resetBrightness();
     WakelockPlus.disable().catchError((_) {});
     super.dispose();
   }
@@ -738,10 +788,16 @@ class _ClockScreenState extends State<ClockScreen>
           _use24h = !_use24h;
           _saveSettings();
         }),
-        onVerticalDragUpdate: (details) => setState(() {
-          _dim = (_dim - details.delta.dy / 600).clamp(0.15, 1.0);
-        }),
-        onVerticalDragEnd: (_) => _saveSettings(),
+        onVerticalDragUpdate: (details) {
+          setState(() {
+            _dim = (_dim - details.delta.dy / 600).clamp(0.0, 1.0);
+          });
+          _applyBrightness(); // Live, so the swipe reads as one gesture.
+        },
+        onVerticalDragEnd: (_) {
+          _applyBrightness(force: true);
+          _saveSettings();
+        },
         onHorizontalDragEnd: (details) => setState(() {
           final velocity = details.primaryVelocity ?? 0;
           _fontIndex = velocity < 0
@@ -776,7 +832,7 @@ class _ClockScreenState extends State<ClockScreen>
             return Transform.translate(
               offset: _drift,
               child: Opacity(
-                opacity: _dim,
+                opacity: _pixelOpacity,
                 child: Stack(
                   children: [
                     Center(
