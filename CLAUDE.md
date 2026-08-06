@@ -1,8 +1,10 @@
 # Night Clock
 
 Flutter nightstand clock that turns a spare Galaxy Note 8 into a bedside
-display. Landscape-only: big time on the left, current-month calendar with
-today circled on the right, true-black background for AMOLED.
+display. Landscape-only: the time fills the screen with a fading accent
+hairline and the date beneath it, plus a battery gauge at the bottom, on a
+true-black background for AMOLED. (A month calendar used to sit on the
+right; the user removed it as redundant — don't reintroduce it.)
 
 ## Target device
 
@@ -40,6 +42,11 @@ copy (the user keeps it for reinstalling without the Mac).
 - Gestures: tap = colour theme, horizontal swipe = style, vertical swipe =
   dim, long-press = 12/24h, double-tap = seconds. Settings persist via
   SharedPreferences.
+- Style rules the user chose (do not regress): the date renders red
+  (`_red`) regardless of theme, and every digit "1" renders red — the
+  `_redOnes` helper wraps time digits, flip cards, burst, analog numerals
+  ("12" included), and the battery %. (The date was briefly white; the
+  user then asked for red.)
 - Two-stage dimmer: `_dim` above `_panelFloor` (0.4) drives real
   window-level brightness (screen_brightness plugin, no permissions,
   system setting untouched, reset on pause/dispose, re-asserted on resume
@@ -49,7 +56,10 @@ copy (the user keeps it for reinstalling without the Mac).
   are hidden (`_scheduleTick` targets the next boundary), burn-in drift is
   an instant jump (never animate it), all timers stop when the app is not
   visible (`didChangeAppLifecycleState`).
-- Burn-in protection: whole display wanders ±40×±20 px each minute.
+- Burn-in protection: whole display wanders ±40×±20 px each minute. The
+  face area is inset 44×24 px so that drift never pushes content offscreen,
+  and the text face sits in a `FittedBox` (scaleDown) so wide fonts shrink
+  instead of wrapping — the test font's square glyphs overflow without it.
 
 ## Fonts (fonts/)
 

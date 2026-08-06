@@ -102,21 +102,21 @@ class _FlipCardState extends State<_FlipCard>
     );
 
     Widget half({required bool top, required String text}) => ClipRect(
-          child: Align(
-            alignment: top ? Alignment.topCenter : Alignment.bottomCenter,
-            heightFactor: 0.5,
-            child: Container(
-              width: cardW,
-              height: cardH,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFF151517),
-                borderRadius: BorderRadius.circular(radius),
-              ),
-              child: Text(text, style: digitStyle),
-            ),
+      child: Align(
+        alignment: top ? Alignment.topCenter : Alignment.bottomCenter,
+        heightFactor: 0.5,
+        child: Container(
+          width: cardW,
+          height: cardH,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFF151517),
+            borderRadius: BorderRadius.circular(radius),
           ),
-        );
+          child: Text.rich(_redOnes(text, digitStyle)),
+        ),
+      ),
+    );
 
     return AnimatedBuilder(
       animation: _controller,
@@ -133,11 +133,13 @@ class _FlipCardState extends State<_FlipCard>
           child: Stack(
             children: [
               Align(
-                  alignment: Alignment.topCenter,
-                  child: half(top: true, text: next)),
+                alignment: Alignment.topCenter,
+                child: half(top: true, text: next),
+              ),
               Align(
-                  alignment: Alignment.bottomCenter,
-                  child: half(top: false, text: prev)),
+                alignment: Alignment.bottomCenter,
+                child: half(top: false, text: prev),
+              ),
               if (animating && t < 0.5)
                 Align(
                   alignment: Alignment.topCenter,
@@ -227,12 +229,18 @@ class _AnalogPainter extends CustomPainter {
   final bool showSeconds;
   final String dateText;
 
-  void _text(Canvas canvas, String s, Offset center, double fontSize, Color c,
-      FontWeight weight) {
+  void _text(
+    Canvas canvas,
+    String s,
+    Offset center,
+    double fontSize,
+    Color c,
+    FontWeight weight,
+  ) {
     final tp = TextPainter(
-      text: TextSpan(
-        text: s,
-        style: TextStyle(color: c, fontSize: fontSize, fontWeight: weight),
+      text: _redOnes(
+        s,
+        TextStyle(color: c, fontSize: fontSize, fontWeight: weight),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -268,17 +276,47 @@ class _AnalogPainter extends CustomPainter {
         );
       }
     }
-    _text(canvas, '12', c + Offset(0, -r * 0.80), r * 0.15, color,
-        FontWeight.w600);
-    _text(canvas, '3', c + Offset(r * 0.80, 0), r * 0.15, color,
-        FontWeight.w600);
-    _text(canvas, '6', c + Offset(0, r * 0.80), r * 0.15, color,
-        FontWeight.w600);
-    _text(canvas, '9', c + Offset(-r * 0.80, 0), r * 0.15, color,
-        FontWeight.w600);
+    _text(
+      canvas,
+      '12',
+      c + Offset(0, -r * 0.80),
+      r * 0.15,
+      color,
+      FontWeight.w600,
+    );
+    _text(
+      canvas,
+      '3',
+      c + Offset(r * 0.80, 0),
+      r * 0.15,
+      color,
+      FontWeight.w600,
+    );
+    _text(
+      canvas,
+      '6',
+      c + Offset(0, r * 0.80),
+      r * 0.15,
+      color,
+      FontWeight.w600,
+    );
+    _text(
+      canvas,
+      '9',
+      c + Offset(-r * 0.80, 0),
+      r * 0.15,
+      color,
+      FontWeight.w600,
+    );
 
-    _text(canvas, dateText, c + Offset(r * 0.32, 0), r * 0.09, accent,
-        FontWeight.w700);
+    _text(
+      canvas,
+      dateText,
+      c + Offset(r * 0.32, 0),
+      r * 0.09,
+      _red,
+      FontWeight.w700,
+    );
 
     final hourAngle =
         2 * pi * ((now.hour % 12) + now.minute / 60) / 12 - pi / 2;
@@ -335,6 +373,27 @@ class _AnalogPainter extends CustomPainter {
 
 enum _ClockStyle { text, flip, burst, analog }
 
+// Nothing-style accents: the date is always red, and every digit "1"
+// renders red no matter the theme colour.
+const _red = Color(0xFFFF453A);
+const _white = Color(0xFFE8E8E8);
+
+/// Wraps [text] so each "1" is red, keeping the base style's opacity.
+TextSpan _redOnes(String text, TextStyle style) {
+  if (!text.contains('1')) return TextSpan(text: text, style: style);
+  final red = _red.withValues(alpha: style.color?.a ?? 1.0);
+  return TextSpan(
+    style: style,
+    children: [
+      for (final ch in text.split(''))
+        TextSpan(
+          text: ch,
+          style: ch == '1' ? TextStyle(color: red) : null,
+        ),
+    ],
+  );
+}
+
 class _FontSpec {
   const _FontSpec({
     this.family,
@@ -353,14 +412,13 @@ class _FontSpec {
   final _ClockStyle style;
 }
 
-class _ClockScreenState extends State<ClockScreen>
-    with WidgetsBindingObserver {
+class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   static const _themes = [
-    Color(0xFFFF453A), // red
+    _red,
     Color(0xFFFF9F0A), // amber
     Color(0xFF30D158), // green
     Color(0xFF64D2FF), // cyan
-    Color(0xFFE8E8E8), // white
+    _white,
   ];
   static const _fonts = [
     _FontSpec(), // Roboto
@@ -394,8 +452,18 @@ class _ClockScreenState extends State<ClockScreen>
   ];
   static const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   int _themeIndex = 0;
@@ -411,9 +479,8 @@ class _ClockScreenState extends State<ClockScreen>
   static const _panelFloor = 0.4;
   static const _minOpacity = 0.12;
 
-  double get _panelBrightness => _dim <= _panelFloor
-      ? 0.0
-      : (_dim - _panelFloor) / (1 - _panelFloor);
+  double get _panelBrightness =>
+      _dim <= _panelFloor ? 0.0 : (_dim - _panelFloor) / (1 - _panelFloor);
 
   double get _pixelOpacity => _dim >= _panelFloor
       ? 1.0
@@ -535,8 +602,16 @@ class _ClockScreenState extends State<ClockScreen>
     _prefs?.setBool('seconds', _showSeconds);
   }
 
-  Widget _buildFlipTime(Color color, double digitSize, TextStyle smallStyle,
-      String hh, String mm, String ss, String ampm, double h) {
+  Widget _buildFlipTime(
+    Color color,
+    double digitSize,
+    TextStyle smallStyle,
+    String hh,
+    String mm,
+    String ss,
+    String ampm,
+    double h,
+  ) {
     final fs = digitSize * 0.85;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -564,66 +639,79 @@ class _ClockScreenState extends State<ClockScreen>
 
   // Accent used by the fun faces: red like the references, unless the theme
   // itself is red — then near-white so the accent still stands out.
-  Color get _accent =>
-      _themes[_themeIndex] == _themes[0] ? const Color(0xFFE8E8E8) : _themes[0];
+  Color get _accent => _themes[_themeIndex] == _red ? _white : _red;
 
   Widget _buildBurstFace(
-      Color color, String hh, String mm, String ss, String ampm) {
-    return LayoutBuilder(builder: (context, c) {
-      final ph = c.maxHeight;
-      final fs = min(c.maxWidth * 0.34, ph * 0.30);
-      final digitStyle = TextStyle(
-        color: color,
-        fontSize: fs,
-        fontWeight: FontWeight.w800,
-        height: 0.9,
-        fontFeatures: const [FontFeature.tabularFigures()],
-      );
-      final dateStyle = TextStyle(
-        fontSize: fs * 0.16,
-        fontWeight: FontWeight.w800,
-        letterSpacing: fs * 0.01,
-      );
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          CustomPaint(painter: _BurstPainter(color: color)),
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text.rich(
-                  TextSpan(children: [
+    Color color,
+    String hh,
+    String mm,
+    String ss,
+    String ampm,
+  ) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final ph = c.maxHeight;
+        final fs = min(c.maxWidth * 0.34, ph * 0.30);
+        final digitStyle = TextStyle(
+          color: color,
+          fontSize: fs,
+          fontWeight: FontWeight.w800,
+          height: 0.9,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        );
+        final dateStyle = TextStyle(
+          fontSize: fs * 0.16,
+          fontWeight: FontWeight.w800,
+          letterSpacing: fs * 0.01,
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            CustomPaint(painter: _BurstPainter(color: color)),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text.rich(
                     TextSpan(
-                        text: _weekdays[_now.weekday - 1].toUpperCase(),
-                        style: dateStyle.copyWith(color: _accent)),
-                    TextSpan(
-                        text: ' ${_now.day}',
-                        style: dateStyle.copyWith(
-                            color: color.withValues(alpha: 0.9))),
-                  ]),
-                ),
-                SizedBox(height: ph * 0.04),
-                Text(hh, style: digitStyle),
-                Text(mm, style: digitStyle),
-                if (_showSeconds || !_use24h)
-                  Padding(
-                    padding: EdgeInsets.only(top: ph * 0.02),
-                    child: Text(
-                      [if (_showSeconds) ss, if (!_use24h) ampm].join('  '),
-                      style: TextStyle(
-                        color: color.withValues(alpha: 0.5),
-                        fontSize: fs * 0.13,
-                        letterSpacing: fs * 0.01,
-                      ),
+                      children: [
+                        TextSpan(
+                          text: _weekdays[_now.weekday - 1].toUpperCase(),
+                          style: dateStyle.copyWith(color: _red),
+                        ),
+                        TextSpan(
+                          text: ' ${_now.day}',
+                          style: dateStyle.copyWith(
+                            color: _red.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-              ],
+                  SizedBox(height: ph * 0.04),
+                  Text.rich(_redOnes(hh, digitStyle)),
+                  Text.rich(_redOnes(mm, digitStyle)),
+                  if (_showSeconds || !_use24h)
+                    Padding(
+                      padding: EdgeInsets.only(top: ph * 0.02),
+                      child: Text.rich(
+                        _redOnes(
+                          [if (_showSeconds) ss, if (!_use24h) ampm].join('  '),
+                          TextStyle(
+                            color: color.withValues(alpha: 0.5),
+                            fontSize: fs * 0.13,
+                            letterSpacing: fs * 0.01,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildAnalogFace(Color color) {
@@ -637,85 +725,6 @@ class _ClockScreenState extends State<ClockScreen>
         dateText: '${_weekdays[_now.weekday - 1].toUpperCase()} ${_now.day}',
       ),
     );
-  }
-
-  static const _weekdayLetters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-  Widget _buildCalendar(Color color, double w, double h) {
-    final year = _now.year;
-    final month = _now.month;
-    final today = _now.day;
-    final leading = DateTime(year, month, 1).weekday % 7; // Sunday-first grid.
-    final daysInMonth = DateTime(year, month + 1, 0).day;
-    final cell = min(w * 0.4 / 7 * 0.82, h * 0.115);
-
-    final headerStyle = TextStyle(
-      color: color.withValues(alpha: 0.75),
-      fontSize: cell * 0.48,
-      fontWeight: FontWeight.w600,
-      letterSpacing: cell * 0.06,
-    );
-    final letterStyle = TextStyle(
-      color: color.withValues(alpha: 0.35),
-      fontSize: cell * 0.36,
-      fontWeight: FontWeight.w600,
-    );
-    final dayStyle = TextStyle(
-      color: color.withValues(alpha: 0.7),
-      fontSize: cell * 0.42,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
-
-    Widget cellBox(Widget? child) =>
-        SizedBox(width: cell, height: cell, child: Center(child: child));
-
-    final rows = <Widget>[
-      Padding(
-        padding: EdgeInsets.only(bottom: cell * 0.35),
-        child: Text(
-          '${_months[month - 1]} $year'.toUpperCase(),
-          style: headerStyle,
-        ),
-      ),
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final letter in _weekdayLetters)
-            cellBox(Text(letter, style: letterStyle)),
-        ],
-      ),
-    ];
-
-    final totalCells = leading + daysInMonth;
-    for (var start = 0; start < totalCells; start += 7) {
-      rows.add(Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = start; i < start + 7; i++)
-            if (i < leading || i >= totalCells)
-              cellBox(null)
-            else if (i - leading + 1 == today)
-              cellBox(Container(
-                width: cell * 0.85,
-                height: cell * 0.85,
-                alignment: Alignment.center,
-                decoration:
-                    BoxDecoration(color: color, shape: BoxShape.circle),
-                child: Text(
-                  '${i - leading + 1}',
-                  style: dayStyle.copyWith(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ))
-            else
-              cellBox(Text('${i - leading + 1}', style: dayStyle)),
-        ],
-      ));
-    }
-
-    return Column(mainAxisSize: MainAxisSize.min, children: rows);
   }
 
   // Window-level brightness: no WRITE_SETTINGS permission, and the system
@@ -738,6 +747,65 @@ class _ClockScreenState extends State<ClockScreen>
     } catch (_) {
       // Nothing to restore.
     }
+  }
+
+  // Bottom battery badge: an outline pill with a proportional fill, so one
+  // glance says whether the phone needs its charger.
+  Widget _buildBatteryBadge(Color color, double digitSize) {
+    final bh = digitSize * 0.115;
+    final warn = _batteryLevel <= 20 && !_charging;
+    final line = color.withValues(alpha: 0.45);
+    final fill = warn ? _accent.withValues(alpha: 0.8) : line;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: digitSize * 0.24,
+          height: bh,
+          padding: EdgeInsets.all(bh * 0.15),
+          decoration: BoxDecoration(
+            border: Border.all(color: line, width: max(1, bh * 0.08)),
+            borderRadius: BorderRadius.circular(bh * 0.28),
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: (_batteryLevel / 100).clamp(0.0, 1.0),
+              heightFactor: 1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: fill,
+                  borderRadius: BorderRadius.circular(bh * 0.12),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Container(
+          width: bh * 0.18,
+          height: bh * 0.42,
+          margin: EdgeInsets.only(left: bh * 0.1),
+          decoration: BoxDecoration(
+            color: line,
+            borderRadius: BorderRadius.circular(bh * 0.1),
+          ),
+        ),
+        SizedBox(width: bh * 0.55),
+        Text.rich(
+          _redOnes(
+            '${_charging ? '⚡ ' : ''}$_batteryLevel%',
+            TextStyle(
+              color: warn
+                  ? _accent.withValues(alpha: 0.8)
+                  : color.withValues(alpha: 0.5),
+              fontSize: digitSize * 0.075,
+              letterSpacing: digitSize * 0.008,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _updateBatteryLevel() async {
@@ -768,8 +836,6 @@ class _ClockScreenState extends State<ClockScreen>
     final mm = _now.minute.toString().padLeft(2, '0');
     final ss = _now.second.toString().padLeft(2, '0');
     final ampm = hour24 >= 12 ? 'PM' : 'AM';
-    final date =
-        '${_weekdays[_now.weekday - 1]}, ${_months[_now.month - 1]} ${_now.day}';
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -809,7 +875,7 @@ class _ClockScreenState extends State<ClockScreen>
           builder: (context, constraints) {
             final w = constraints.maxWidth;
             final h = constraints.maxHeight;
-            final digitSize = min(w * 0.185, h * 0.50);
+            final digitSize = min(w * 0.23, h * 0.52);
             final font = _fonts[_fontIndex];
             final digitStyle = TextStyle(
               color: color,
@@ -826,6 +892,11 @@ class _ClockScreenState extends State<ClockScreen>
               fontSize: digitSize * 0.085,
               letterSpacing: digitSize * 0.012,
             );
+            final dateStyle = TextStyle(
+              fontSize: digitSize * 0.105,
+              fontWeight: FontWeight.w600,
+              letterSpacing: digitSize * 0.022,
+            );
 
             // A plain translate: the drift jump costs one frame, where an
             // animated slide would render ~120 frames every minute.
@@ -835,61 +906,114 @@ class _ClockScreenState extends State<ClockScreen>
                 opacity: _pixelOpacity,
                 child: Stack(
                   children: [
-                    Center(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: font.style == _ClockStyle.burst
-                                ? _buildBurstFace(color, hh, mm, ss, ampm)
-                                : font.style == _ClockStyle.analog
-                                    ? _buildAnalogFace(color)
-                                    : Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (font.style == _ClockStyle.flip)
-                                    _buildFlipTime(color, digitSize,
-                                        smallStyle, hh, mm, ss, ampm, h)
-                                  else
-                                  Text.rich(
-                                    TextSpan(
-                                      children: [
-                                        TextSpan(
-                                            text: '$hh:$mm', style: digitStyle),
-                                        if (_showSeconds)
+                    // Inset by the drift range (±40 × ±20) so the full-screen
+                    // faces never wander off the panel edge.
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 44,
+                          vertical: 24,
+                        ),
+                        child: font.style == _ClockStyle.burst
+                            ? _buildBurstFace(color, hh, mm, ss, ampm)
+                            : font.style == _ClockStyle.analog
+                            ? _buildAnalogFace(color)
+                            : Center(
+                                // scaleDown keeps the widest fonts on one
+                                // line instead of wrapping or clipping.
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (font.style == _ClockStyle.flip)
+                                        _buildFlipTime(
+                                          color,
+                                          digitSize,
+                                          smallStyle,
+                                          hh,
+                                          mm,
+                                          ss,
+                                          ampm,
+                                          h,
+                                        )
+                                      else
+                                        Text.rich(
                                           TextSpan(
-                                            text: ' $ss',
-                                            style: digitStyle.copyWith(
-                                              fontSize: digitSize * 0.28,
-                                              fontWeight: FontWeight.w600,
-                                              color:
-                                                  color.withValues(alpha: 0.5),
-                                            ),
+                                            children: [
+                                              _redOnes('$hh:$mm', digitStyle),
+                                              if (_showSeconds)
+                                                _redOnes(
+                                                  ' $ss',
+                                                  digitStyle.copyWith(
+                                                    fontSize: digitSize * 0.28,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: color.withValues(
+                                                      alpha: 0.5,
+                                                    ),
+                                                  ),
+                                                ),
+                                              if (!_use24h)
+                                                TextSpan(
+                                                  text: ' $ampm',
+                                                  style: smallStyle,
+                                                ),
+                                            ],
                                           ),
-                                        if (!_use24h)
-                                          TextSpan(
-                                              text: ' $ampm',
-                                              style: smallStyle),
-                                      ],
-                                    ),
+                                        ),
+                                      SizedBox(height: h * 0.055),
+                                      Container(
+                                        width: digitSize * 2.4,
+                                        height: max(1.5, digitSize * 0.014),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            2,
+                                          ),
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              color.withValues(alpha: 0),
+                                              color.withValues(alpha: 0.55),
+                                              color.withValues(alpha: 0),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(height: h * 0.055),
+                                      Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: _weekdays[_now.weekday - 1]
+                                                  .toUpperCase(),
+                                              style: dateStyle.copyWith(
+                                                color: _red,
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text: '  ·  ',
+                                              style: dateStyle.copyWith(
+                                                color: _red.withValues(
+                                                  alpha: 0.4,
+                                                ),
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text:
+                                                  '${_months[_now.month - 1]} ${_now.day}'
+                                                      .toUpperCase(),
+                                              style: dateStyle.copyWith(
+                                                color: _red.withValues(
+                                                  alpha: 0.9,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  Padding(
-                                    padding: EdgeInsets.only(top: h * 0.06),
-                                    child: Text(date.toUpperCase(),
-                                        style: smallStyle),
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Center(
-                              child: _buildCalendar(color, w, h),
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                     if (_batteryLevel >= 0)
@@ -897,13 +1021,8 @@ class _ClockScreenState extends State<ClockScreen>
                         left: 0,
                         right: 0,
                         bottom: h * 0.05,
-                        child: Text(
-                          '${_charging ? '⚡ ' : ''}$_batteryLevel%',
-                          textAlign: TextAlign.center,
-                          style: smallStyle.copyWith(
-                            color: color.withValues(alpha: 0.35),
-                            fontSize: digitSize * 0.065,
-                          ),
+                        child: Center(
+                          child: _buildBatteryBadge(color, digitSize),
                         ),
                       ),
                     if (_showHint)
