@@ -5,49 +5,28 @@ landscape like Apple's Nightstand mode: the time fills the screen, with an
 accent hairline and the date beneath it, on a true-black AMOLED-friendly
 background. The screen stays on via `wakelock_plus`.
 
-Two Nothing-inspired style rules apply everywhere: the date is always red
-whatever the theme colour, and every digit "1" — in the time, flip cards,
-burst face, the analog "12", even the battery percentage — renders red.
+The palette is white and red only: the time is white, the date is red, and
+every digit "1" renders red.
 
 ## Gestures
 
-- **Tap** — cycle digit colour (red / amber / green / cyan / white)
-- **Swipe left / right** — cycle clock styles: 9 fonts plus 3 fun faces
-  (flip clock, dash burst, analog)
 - **Swipe up / down** — brighter / dimmer (two-stage, see Battery)
 - **Long-press** — toggle 12/24-hour
 - **Double-tap** — show/hide seconds
 
 Settings persist across launches. The whole display wanders within a
 ±40 × ±20 px region, jumping to a new spot every minute, so no pixel holds a
-static image — AMOLED burn-in protection. A battery gauge at the bottom
-shows a fill bar plus the exact percentage (⚡ while charging, accent-tinted
-when ≤ 20%) so a glance says whether the phone needs its charger.
+static image — AMOLED burn-in protection.
 
-## Fonts
+At the bottom sits a plain capsule bar — no battery outline, no percentage.
+Its length is the charge and its colour is the warning, lerped green (100%)
+through amber (50%) to red (0%). A bolt appears to its left while charging.
 
-Swiping cycles through nine fonts:
+## Font
 
-- **Roboto** — system default
-- **NDot 47** — "inspired by Nothing" community dot-matrix font
-- **Doto** — round dot-matrix in the same style (SIL OFL, Google Fonts)
-- **DSEG7 Classic** — classic 7-segment digital clock (SIL OFL, by Keshikan)
-- **Orbitron** — geometric sci-fi (SIL OFL, Google Fonts)
-- **Oxanium** — squared tech face (SIL OFL, Google Fonts)
-- **Nabla** — 3D colour font; paints its own colours, so the theme tint
-  doesn't apply (SIL OFL, Google Fonts)
-- **Bitcount Ink** — pixel dot-matrix (SIL OFL, Google Fonts)
-- **Saira Condensed** — tall condensed sans (SIL OFL, Google Fonts)
-
-…then three fun faces:
-
-- **Flip clock** — split-flap cards that fold down on each minute change
-- **Dash burst** — stacked digits ringed by radiating dashes, date on top
-- **Analog** — minimal face with radial ticks, 12/3/6/9 numerals, and the
-  date beside the centre
-
-The bundled fonts and their licenses live in `fonts/`. NDot 47 is a fan
-recreation distributed for free; the OFL fonts include their license texts.
+One face: **DSEG7 Classic**, the 7-segment digital clock font (SIL OFL, by
+Keshikan), in `fonts/` with its license. It covers digits and the colon
+only, so the date and AM/PM deliberately fall back to the platform font.
 
 ## Battery
 
@@ -67,10 +46,10 @@ two-stage control:
   pixels toward black (down to 12% opacity). It's the only way to go dimmer
   than the hardware allows, and on AMOLED darker pixels still draw less.
 
-To stretch it further: use the red theme (fewest lit subpixels on AMOLED),
-and keep the phone on its charger — a screen-on Note 8 pulls ~1.5–2.5 W, so
-a 5 W trickle charger will lose that race. Use an Adaptive Fast Charging
-brick.
+To stretch it further, keep the phone on its charger — a screen-on Note 8
+pulls ~1.5–2.5 W, so a 5 W trickle charger will lose that race, and so will
+a laptop USB port. Use an Adaptive Fast Charging brick; measured on-device,
+a proper one pulls ~1.6 A.
 
 To cut everything else on the phone, see **Bedside tips** below.
 

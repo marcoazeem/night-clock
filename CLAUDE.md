@@ -1,10 +1,13 @@
 # Night Clock
 
 Flutter nightstand clock that turns a spare Galaxy Note 8 into a bedside
-display. Landscape-only: the time fills the screen with a fading accent
-hairline and the date beneath it, plus a battery gauge at the bottom, on a
+display. Landscape-only: the time fills the screen with a fading white
+hairline and the date beneath it, plus a battery bar at the bottom, on a
 true-black background for AMOLED. (A month calendar used to sit on the
 right; the user removed it as redundant — don't reintroduce it.)
+
+Deliberately minimal — the user has stripped this down twice. One font, two
+colours, no icon chrome. Don't add faces, themes, or decoration back.
 
 ## Target device
 
@@ -15,6 +18,11 @@ right; the user removed it as redundant — don't reintroduce it.)
   that size.
 - Do NOT inject input (`adb shell input ...`) — the user often holds the
   phone. Verify visuals with golden tests instead (see below).
+- `adb shell dumpsys battery set level N` does NOT move the in-app gauge:
+  battery_plus reads `BATTERY_PROPERTY_CAPACITY` from the HAL, which the
+  override bypasses. Verify gauge colours with a golden test instead, and
+  note the level is only re-polled once a minute (or on a charge-state
+  change), so it lags a forced change either way.
 
 ## Toolchain & commands
 
@@ -34,19 +42,20 @@ copy (the user keeps it for reinstalling without the Mac).
 
 ## Architecture (single file: lib/main.dart)
 
-- `_fonts` is the style cycle: 9 `_FontSpec` font entries (each with a
-  per-font `scale`/`height`/`tracking` so different faces fill the panel
-  similarly) plus 3 `_ClockStyle` faces: `flip` (split-flap cards,
-  `_FlipCard` animates the fold), `burst` (`_BurstPainter` dash ring),
-  `analog` (`_AnalogPainter`).
-- Gestures: tap = colour theme, horizontal swipe = style, vertical swipe =
-  dim, long-press = 12/24h, double-tap = seconds. Settings persist via
-  SharedPreferences.
-- Style rules the user chose (do not regress): the date renders red
-  (`_red`) regardless of theme, and every digit "1" renders red — the
-  `_redOnes` helper wraps time digits, flip cards, burst, analog numerals
-  ("12" included), and the battery %. (The date was briefly white; the
-  user then asked for red.)
+- One face only: DSEG7 7-segment digits (`_digitFont` and its
+  `_digitScale`/`_digitHeight`/`_digitTracking` constants). The font cycle,
+  `_FontSpec`, `_ClockStyle`, and the flip/burst/analog faces were all
+  deleted — don't bring them back.
+- Two colours only: `_white` for the time, `_red` for the date and for
+  every digit "1" (the `_redOnes` helper). The theme cycle and its tap
+  gesture are gone. (The date was briefly white; the user asked for red.)
+- Gestures: vertical swipe = dim, long-press = 12/24h, double-tap =
+  seconds. Settings persist via SharedPreferences. There is no tap or
+  horizontal-swipe gesture any more.
+- Battery bar: a plain capsule, no outline and no percentage — length is
+  the charge, colour comes from `batteryColor()` (green 100 → amber 50 →
+  red 0, lerped), with `Icons.bolt` shown only while charging. The user
+  explicitly rejected a battery-shaped icon and the % readout.
 - Two-stage dimmer: `_dim` above `_panelFloor` (0.4) drives real
   window-level brightness (screen_brightness plugin, no permissions,
   system setting untouched, reset on pause/dispose, re-asserted on resume
@@ -63,11 +72,11 @@ copy (the user keeps it for reinstalling without the Mac).
 
 ## Fonts (fonts/)
 
-All bundled with license texts. Nabla is a COLR colour font — it paints
-its own gradient and ignores the theme colour; that is expected, not a
-bug. `ndot-47-inspired-by-nothing.otf` is a free fan recreation (no formal
-license — known small takedown risk in the public repo). DSEG7 has digits
-only; never use it for text.
+Only `DSEG7Classic-Bold.ttf` plus `OFL-DSEG.txt` remain; the other eight
+faces and their licenses were deleted when the app went single-font (this
+also removed the NDot fan-recreation takedown risk). DSEG7 covers digits
+and the colon only — never use it for text, so the date and AM/PM
+intentionally fall back to the platform font.
 
 ## Verifying visuals without the phone
 
