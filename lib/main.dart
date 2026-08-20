@@ -11,8 +11,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
   ]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   runApp(const NightClockApp());
@@ -64,8 +64,42 @@ TextSpan _redOnes(String text, TextStyle style) {
     style: style,
     children: [
       for (final ch in text.split(''))
-        TextSpan(text: ch, style: ch == '1' ? TextStyle(color: red) : null),
+        TextSpan(
+          text: ch,
+          style: ch == '1' ? TextStyle(color: red) : null,
+        ),
     ],
+  );
+}
+
+/// How brightly the unlit segments glow, relative to the digit's own
+/// opacity. A real 7-segment panel shows every segment faintly, lit or not.
+const _segmentOff = 0.11;
+
+/// The digits over their own unlit segments. DSEG7 is monospaced and "8"
+/// drives all seven segments, so an all-8s layer of the same style lines up
+/// exactly behind [text].
+Widget _segments(String text, TextStyle style) {
+  return Stack(
+    children: [
+      Text(
+        '8' * text.length,
+        style: style.copyWith(
+          color: _white.withValues(alpha: _segmentOff * (style.color?.a ?? 1)),
+        ),
+      ),
+      Text.rich(_redOnes(text, style)),
+    ],
+  );
+}
+
+/// Holds [child] to [width], shrinking it if it would be wider. The two
+/// stacked digits are what should set the face width; without this a long
+/// date or a wide platform font would, and the digits would shrink to suit.
+Widget _capWidth(double width, Widget child) {
+  return SizedBox(
+    width: width,
+    child: FittedBox(fit: BoxFit.scaleDown, child: child),
   );
 }
 
@@ -160,9 +194,11 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     _driftTimer?.cancel();
     _driftTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       setState(() {
+        // Portrait: the panel is narrow across and tall, so wander
+        // ±20 sideways and ±40 up/down — the reverse of landscape.
         _drift = Offset(
-          _random.nextDouble() * 80 - 40,
           _random.nextDouble() * 40 - 20,
+          _random.nextDouble() * 80 - 40,
         );
       });
       _updateBatteryLevel();
@@ -249,9 +285,9 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
 
   /// A plain capsule bar — no battery outline, no percentage. The fill length
   /// is the charge and its colour is the warning; a bolt appears when charging.
-  Widget _buildBatteryBar(double digitSize) {
+  Widget _buildBatteryBar(double width) {
     final level = _batteryLevel.clamp(0, 100);
-    final barH = max(3.0, digitSize * 0.045);
+    final barH = max(3.0, width * 0.014);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -264,7 +300,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
           SizedBox(width: barH * 0.6),
         ],
         Container(
-          width: digitSize * 1.5,
+          width: width * 0.48,
           height: barH,
           decoration: BoxDecoration(
             color: _white.withValues(alpha: 0.14),
@@ -343,7 +379,15 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
           builder: (context, constraints) {
             final w = constraints.maxWidth;
             final h = constraints.maxHeight;
-            final digitSize = min(w * 0.23, h * 0.52);
+            // Portrait stacks HH over MM, so two glyphs — not five — set
+            // the width. This overshoots on purpose: the FittedBox below
+            // scales the column down until it fills the panel exactly.
+            final digitSize = min(w * 1.15, h * 0.55);
+            // The measured width of the two stacked digits (DSEG7 advances
+            // ~0.485em, plus tracking either side). Everything below the
+            // minutes is held to this, so the digits are what the outer
+            // FittedBox scales to fill the panel.
+            final faceWidth = digitSize * 0.83;
             // DSEG7 covers digits and the colon only; everything else below
             // deliberately falls back to the platform font.
             final digitStyle = TextStyle(
@@ -357,13 +401,13 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
             );
             final smallStyle = TextStyle(
               color: _white.withValues(alpha: 0.55),
-              fontSize: digitSize * 0.085,
-              letterSpacing: digitSize * 0.012,
+              fontSize: digitSize * 0.055,
+              letterSpacing: digitSize * 0.009,
             );
             final dateStyle = TextStyle(
-              fontSize: digitSize * 0.105,
+              fontSize: digitSize * 0.075,
               fontWeight: FontWeight.w600,
-              letterSpacing: digitSize * 0.022,
+              letterSpacing: digitSize * 0.016,
             );
 
             // A plain translate: the drift jump costs one frame, where an
@@ -374,49 +418,61 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                 opacity: _pixelOpacity,
                 child: Stack(
                   children: [
-                    // Inset by the drift range (±40 × ±20) so the face never
+                    // Inset by the drift range (±20 × ±40) so the face never
                     // wanders off the panel edge.
                     Positioned.fill(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 44,
-                          vertical: 24,
+                          horizontal: 24,
+                          vertical: 44,
                         ),
                         child: Center(
-                          // scaleDown keeps the time on one line instead of
-                          // wrapping or clipping.
+                          // scaleDown fits the stack to the panel: two
+                          // digits wide is what binds, so this fills the
+                          // width without ever wrapping or clipping.
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      _redOnes('$hh:$mm', digitStyle),
-                                      if (_showSeconds)
-                                        _redOnes(
-                                          ' $ss',
-                                          digitStyle.copyWith(
-                                            fontSize: digitSize * 0.28,
-                                            fontWeight: FontWeight.w600,
-                                            color: _white.withValues(
-                                              alpha: 0.5,
+                                // Hours over minutes: on a narrow panel this
+                                // buys roughly 2.5x the glyph height that one
+                                // "HH:MM" line would fit.
+                                _segments(hh, digitStyle),
+                                SizedBox(height: digitSize * 0.05),
+                                _segments(mm, digitStyle),
+                                if (_showSeconds || !_use24h) ...[
+                                  SizedBox(height: digitSize * 0.07),
+                                  _capWidth(
+                                    faceWidth,
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        if (_showSeconds)
+                                          _segments(
+                                            ss,
+                                            digitStyle.copyWith(
+                                              fontSize: digitSize * 0.12,
+                                              fontWeight: FontWeight.w600,
+                                              color: _white.withValues(
+                                                alpha: 0.5,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      if (!_use24h)
-                                        TextSpan(
-                                          text: ' $ampm',
-                                          style: smallStyle,
-                                        ),
-                                    ],
+                                        if (_showSeconds && !_use24h)
+                                          SizedBox(width: digitSize * 0.05),
+                                        if (!_use24h)
+                                          Text(ampm, style: smallStyle),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                SizedBox(height: h * 0.055),
+                                ],
+                                SizedBox(height: digitSize * 0.11),
                                 Container(
-                                  width: digitSize * 2.4,
-                                  height: max(1.5, digitSize * 0.014),
+                                  width: faceWidth,
+                                  height: max(1.5, digitSize * 0.0045),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(2),
                                     gradient: LinearGradient(
@@ -428,30 +484,35 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ),
-                                SizedBox(height: h * 0.055),
-                                Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(
-                                        text: _weekdays[_now.weekday - 1]
-                                            .toUpperCase(),
-                                        style: dateStyle.copyWith(color: _red),
-                                      ),
-                                      TextSpan(
-                                        text: '  ·  ',
-                                        style: dateStyle.copyWith(
-                                          color: _red.withValues(alpha: 0.4),
+                                SizedBox(height: digitSize * 0.11),
+                                _capWidth(
+                                  faceWidth,
+                                  Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: _weekdays[_now.weekday - 1]
+                                              .toUpperCase(),
+                                          style: dateStyle.copyWith(
+                                            color: _red,
+                                          ),
                                         ),
-                                      ),
-                                      TextSpan(
-                                        text:
-                                            '${_months[_now.month - 1]} ${_now.day}'
-                                                .toUpperCase(),
-                                        style: dateStyle.copyWith(
-                                          color: _red.withValues(alpha: 0.9),
+                                        TextSpan(
+                                          text: '  ·  ',
+                                          style: dateStyle.copyWith(
+                                            color: _red.withValues(alpha: 0.4),
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                        TextSpan(
+                                          text:
+                                              '${_months[_now.month - 1]} ${_now.day}'
+                                                  .toUpperCase(),
+                                          style: dateStyle.copyWith(
+                                            color: _red.withValues(alpha: 0.9),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
@@ -465,7 +526,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                         left: 0,
                         right: 0,
                         bottom: h * 0.05,
-                        child: Center(child: _buildBatteryBar(digitSize)),
+                        child: Center(child: _buildBatteryBar(w)),
                       ),
                     if (_showHint)
                       Positioned(

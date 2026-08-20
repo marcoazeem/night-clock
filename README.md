@@ -1,9 +1,10 @@
 # Night Clock
 
-A bedside nightstand clock (Flutter) for a repurposed Galaxy Note 8 —
-landscape like Apple's Nightstand mode: the time fills the screen, with an
-accent hairline and the date beneath it, on a true-black AMOLED-friendly
-background. The screen stays on via `wakelock_plus`.
+A bedside nightstand clock (Flutter) for a repurposed Galaxy Note 8, made
+for a vertical phone stand: portrait, with the hours stacked over the
+minutes so the digits fill the width of the panel, a fading hairline and
+the date beneath them, on a true-black AMOLED-friendly background. The
+screen stays on via `wakelock_plus`.
 
 The palette is white and red only: the time is white, the date is red, and
 every digit "1" renders red.
@@ -14,13 +15,18 @@ every digit "1" renders red.
 - **Long-press** — toggle 12/24-hour
 - **Double-tap** — show/hide seconds
 
-Settings persist across launches. The whole display wanders within a
-±40 × ±20 px region, jumping to a new spot every minute, so no pixel holds a
-static image — AMOLED burn-in protection.
+Seconds and AM/PM share a small row under the minutes. Settings persist
+across launches. The whole display wanders within a ±20 × ±40 px region,
+jumping to a new spot every minute, so no pixel holds a static image —
+AMOLED burn-in protection.
 
 At the bottom sits a plain capsule bar — no battery outline, no percentage.
 Its length is the charge and its colour is the warning, lerped green (100%)
 through amber (50%) to red (0%). A bolt appears to its left while charging.
+
+Every digit is drawn over its own unlit segments — a faint all-8s layer at
+11% opacity — so the display reads like a real 7-segment panel rather than
+floating glyphs.
 
 ## Font
 

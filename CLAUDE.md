@@ -1,10 +1,12 @@
 # Night Clock
 
 Flutter nightstand clock that turns a spare Galaxy Note 8 into a bedside
-display. Landscape-only: the time fills the screen with a fading white
-hairline and the date beneath it, plus a battery bar at the bottom, on a
-true-black background for AMOLED. (A month calendar used to sit on the
-right; the user removed it as redundant — don't reintroduce it.)
+display. Portrait-only (the user moved it to a vertical stand): the hours
+stack over the minutes and fill the screen, with a fading white hairline
+and the date beneath them and a battery bar at the bottom, on a true-black
+background for AMOLED. (It was landscape with the time on one line until
+Aug 2026 — don't go back. A month calendar used to sit on the right; the
+user removed it as redundant — don't reintroduce it.)
 
 Deliberately minimal — the user has stripped this down twice. One font, two
 colours, no icon chrome. Don't add faces, themes, or decoration back.
@@ -14,10 +16,14 @@ colours, no icon chrome. Don't add faces, themes, or decoration back.
 - Samsung Galaxy Note 8 (SM-N950F), Android 9, usually connected over USB.
   adb serial: `ce0617165451ea26057e` — always pass `-s` (a stale offline
   emulator entry often makes bare `adb` fail with "more than one device").
-- Phone renders at HD+ (1480×720); screenshots pulled from it come out at
-  that size.
+- Phone renders at HD+, so in portrait that's 720×1480 at 280 dpi —
+  411×845 logical, devicePixelRatio 1.75. Screenshots come out 720×1480.
+- Package is `com.ismail.night_clock` (not `com.example.…`); launch with
+  `adb shell am start -n com.ismail.night_clock/.MainActivity`.
 - Do NOT inject input (`adb shell input ...`) — the user often holds the
-  phone. Verify visuals with golden tests instead (see below).
+  phone. Verify visuals with golden tests instead (see below). That
+  includes `keyevent WAKEUP`: if `dumpsys power` says `mWakefulness=Asleep`
+  a screencap is all black, and the fix is to ask the user to wake it.
 - `adb shell dumpsys battery set level N` does NOT move the in-app gauge:
   battery_plus reads `BATTERY_PROPERTY_CAPACITY` from the HAL, which the
   override bypasses. Verify gauge colours with a golden test instead, and
@@ -42,10 +48,24 @@ copy (the user keeps it for reinstalling without the Mac).
 
 ## Architecture (single file: lib/main.dart)
 
+- Portrait layout: `HH` on one line, `MM` under it — no colon. Seconds
+  and AM/PM share a small row below the minutes; then the hairline, then
+  the date. `digitSize` (`min(w * 1.15, h * 0.55)`) deliberately overshoots
+  and the outer `FittedBox` scales the column down to fit, so the digits
+  always fill the panel width. Everything under the minutes is held to
+  `faceWidth` (`digitSize * 0.83`, the measured width of two DSEG7 digits)
+  by `_capWidth` — otherwise a long date sets the width and the digits
+  shrink to suit. The battery bar sizes off the panel width, not
+  `digitSize`, because `digitSize` is an overshoot.
 - One face only: DSEG7 7-segment digits (`_digitFont` and its
   `_digitScale`/`_digitHeight`/`_digitTracking` constants). The font cycle,
   `_FontSpec`, `_ClockStyle`, and the flip/burst/analog faces were all
   deleted — don't bring them back.
+- Unlit segments: `_segments()` draws an all-8s layer at `_segmentOff`
+  (0.11 of the digit's own opacity) behind every DSEG7 run, so the dark
+  segments show the way they do on a real 7-segment panel. It relies on
+  DSEG7 being monospaced with "8" driving all seven segments — the layers
+  line up with no offset. Keep it; the user asked for it explicitly.
 - Two colours only: `_white` for the time, `_red` for the date and for
   every digit "1" (the `_redOnes` helper). The theme cycle and its tap
   gesture are gone. (The date was briefly white; the user asked for red.)
@@ -65,10 +85,10 @@ copy (the user keeps it for reinstalling without the Mac).
   are hidden (`_scheduleTick` targets the next boundary), burn-in drift is
   an instant jump (never animate it), all timers stop when the app is not
   visible (`didChangeAppLifecycleState`).
-- Burn-in protection: whole display wanders ±40×±20 px each minute. The
-  face area is inset 44×24 px so that drift never pushes content offscreen,
-  and the text face sits in a `FittedBox` (scaleDown) so wide fonts shrink
-  instead of wrapping — the test font's square glyphs overflow without it.
+- Burn-in protection: whole display wanders ±20×±40 px each minute (the
+  reverse of the old landscape values — the panel is now narrow across and
+  tall). The face area is inset 24×44 px to match, so drift never pushes
+  content offscreen.
 
 ## Fonts (fonts/)
 
@@ -87,6 +107,18 @@ text as solid boxes (geometry is still checkable; load real TTFs via
 FontLoader when glyphs matter); battery_plus throws MissingPluginException
 in tests — filter it via `FlutterError.onError` or keep it out of the
 committed test.
+
+Two traps that cost real time:
+
+- Never await real file I/O inside `testWidgets` — the fake-async zone
+  never pumps it and the test just hangs for the full 10-minute timeout.
+  Read the TTF with `readAsBytesSync()` and hand `FontLoader` a
+  `Future.value(...)`, or load it in `setUpAll`. Pass `--timeout 60s` so a
+  mistake fails fast.
+- Ahem is far wider than the real platform font, so never size a layout
+  from an Ahem render — the golden shows the date binding the width when
+  on-device it doesn't. Measure the DSEG7 digits (which do render for
+  real) and cap the other rows to that.
 
 ## Measured battery reality (Aug 2026)
 
