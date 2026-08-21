@@ -1,12 +1,14 @@
 # Night Clock
 
 Flutter nightstand clock that turns a spare Galaxy Note 8 into a bedside
-display. Portrait-only (the user moved it to a vertical stand): the hours
-stack over the minutes and fill the screen, with a fading white hairline
-and the date beneath them and a battery bar at the bottom, on a true-black
-background for AMOLED. (It was landscape with the time on one line until
-Aug 2026 — don't go back. A month calendar used to sit on the right; the
-user removed it as redundant — don't reintroduce it.)
+display. It stands on a wireless charger and turns both ways up, because
+the user lays it on its side once it's full to take it off the coil and
+stop it charging all night — so both orientations have to read as a clock.
+Portrait stacks the hours over the minutes; landscape puts `HH:MM` on one
+line. Either way a fading white hairline and the date sit under the time
+and a battery bar sits at the foot, on a true-black background for AMOLED.
+(A month calendar used to sit on the right in landscape; the user removed
+it as redundant — don't reintroduce it, in either orientation.)
 
 Deliberately minimal — the user has stripped this down twice. One font, two
 colours, no icon chrome. Don't add faces, themes, or decoration back.
@@ -17,7 +19,8 @@ colours, no icon chrome. Don't add faces, themes, or decoration back.
   adb serial: `ce0617165451ea26057e` — always pass `-s` (a stale offline
   emulator entry often makes bare `adb` fail with "more than one device").
 - Phone renders at HD+, so in portrait that's 720×1480 at 280 dpi —
-  411×845 logical, devicePixelRatio 1.75. Screenshots come out 720×1480.
+  411×845 logical, devicePixelRatio 1.75 (landscape: 1480×720 physical,
+  845×411 logical). Screenshots come out at the physical size.
 - Package is `com.ismail.night_clock` (not `com.example.…`); launch with
   `adb shell am start -n com.ismail.night_clock/.MainActivity`.
 - Do NOT inject input (`adb shell input ...`) — the user often holds the
@@ -48,15 +51,22 @@ copy (the user keeps it for reinstalling without the Mac).
 
 ## Architecture (single file: lib/main.dart)
 
-- Portrait layout: `HH` on one line, `MM` under it — no colon. Seconds
-  and AM/PM share a small row below the minutes; then the hairline, then
-  the date. `digitSize` (`min(w * 1.15, h * 0.55)`) deliberately overshoots
-  and the outer `FittedBox` scales the column down to fit, so the digits
-  always fill the panel width. Everything under the minutes is held to
-  `faceWidth` (`digitSize * 0.83`, the measured width of two DSEG7 digits)
-  by `_capWidth` — otherwise a long date sets the width and the digits
-  shrink to suit. The battery bar sizes off the panel width, not
-  `digitSize`, because `digitSize` is an overshoot.
+- Layout: one `LayoutBuilder` branch on `w > h`. Portrait is `HH` on one
+  line with `MM` under it and no colon; landscape is `HH:MM` across. Then,
+  shared: a small seconds/AM-PM row, the hairline, the date. `digitSize`
+  (`min(w * 1.15, h * 0.55)` portrait, the coefficients swapped in
+  landscape) deliberately overshoots and the outer `FittedBox` scales the
+  column down to fit — `BoxFit.scaleDown` never scales *up*, so an
+  undershoot leaves the digits small with no way back. `timeWidth` is the
+  time row's real width (DSEG7 advances `0.676 * digitSize` per digit and
+  `0.196` for the colon at this tracking — measured with a `TextPainter`,
+  not guessed); everything under the time is capped to `faceWidth`
+  (`timeWidth * 0.61`) by `_capWidth`, or a long date sets the width and
+  the digits shrink to suit.
+- Face size is set by the *box*, not by `digitSize` — the `FittedBox`
+  refills whatever room it's handed, so scaling `digitSize` does nothing
+  at all. The dial is the `_faceScale` (0.8) `FractionallySizedBox` around
+  it — the user found a full-bleed face too big both ways up.
 - One face only: DSEG7 7-segment digits (`_digitFont` and its
   `_digitScale`/`_digitHeight`/`_digitTracking` constants). The font cycle,
   `_FontSpec`, `_ClockStyle`, and the flip/burst/analog faces were all
@@ -75,7 +85,11 @@ copy (the user keeps it for reinstalling without the Mac).
 - Battery bar: a plain capsule, no outline and no percentage — length is
   the charge, colour comes from `batteryColor()` (green 100 → amber 50 →
   red 0, lerped), with `Icons.bolt` shown only while charging. The user
-  explicitly rejected a battery-shaped icon and the % readout.
+  explicitly rejected a battery-shaped icon and the % readout. It sizes and
+  sits off `barSpan` (the panel's *short* side) so it's the same bar in
+  both orientations — never off `digitSize`, which is an overshoot. The
+  face's bottom padding reserves `barZone` (inset + bolt height + 12) so a
+  height-bound landscape face can't grow down into it.
 - Two-stage dimmer: `_dim` above `_panelFloor` (0.4) drives real
   window-level brightness (screen_brightness plugin, no permissions,
   system setting untouched, reset on pause/dispose, re-asserted on resume
@@ -85,9 +99,11 @@ copy (the user keeps it for reinstalling without the Mac).
   are hidden (`_scheduleTick` targets the next boundary), burn-in drift is
   an instant jump (never animate it), all timers stop when the app is not
   visible (`didChangeAppLifecycleState`).
-- Burn-in protection: whole display wanders ±20×±40 px each minute (the
-  reverse of the old landscape values — the panel is now narrow across and
-  tall). The face area is inset 24×44 px to match, so drift never pushes
+- Burn-in protection: whole display wanders each minute — ±20×±40 px in
+  portrait, ±40×±20 in landscape (wider along the panel's long axis).
+  `_drift` holds a unit offset in [-1, 1]² and `build` scales it, so the
+  range follows a rotation without the timer knowing the size. The face is
+  inset by `drift + 4` on each edge to match, so drift never pushes
   content offscreen.
 
 ## Fonts (fonts/)
@@ -106,7 +122,10 @@ delete the test and `test/goldens/`. Notes: the test font (Ahem) renders
 text as solid boxes (geometry is still checkable; load real TTFs via
 FontLoader when glyphs matter); battery_plus throws MissingPluginException
 in tests — filter it via `FlutterError.onError` or keep it out of the
-committed test.
+committed test. To make the battery bar appear in a golden, mock
+`getBatteryLevel` on the `dev.fluttercommunity.plus/battery` method channel
+(the charging *stream* is an EventChannel and not worth faking — `barZone`
+already reserves the bolt's height whether or not it's charging).
 
 Two traps that cost real time:
 

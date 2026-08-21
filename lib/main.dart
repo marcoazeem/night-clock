@@ -10,9 +10,13 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // All four ways up: the phone stands portrait on the wireless charger and
+  // gets laid on its side, off the coil, once it's full.
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
   ]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   runApp(const NightClockApp());
@@ -93,8 +97,15 @@ Widget _segments(String text, TextStyle style) {
   );
 }
 
-/// Holds [child] to [width], shrinking it if it would be wider. The two
-/// stacked digits are what should set the face width; without this a long
+/// How much of the room it's given the face actually fills. This is the size
+/// dial, not `digitSize` — that deliberately overshoots and the `FittedBox`
+/// scales it back to whatever box it's handed, so shrinking it changes
+/// nothing. Edge to edge was too big both ways up; the user asked for 20%
+/// less, first standing and then on its side.
+const _faceScale = 0.8;
+
+/// Holds [child] to [width], shrinking it if it would be wider. The time is
+/// what should set the face width, stacked or across; without this a long
 /// date or a wide platform font would, and the digits would shrink to suit.
 Widget _capWidth(double width, Widget child) {
   return SizedBox(
@@ -194,11 +205,11 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     _driftTimer?.cancel();
     _driftTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       setState(() {
-        // Portrait: the panel is narrow across and tall, so wander
-        // ±20 sideways and ±40 up/down — the reverse of landscape.
+        // Unit offsets in [-1, 1]; build scales them to the drift range for
+        // whichever way up the phone is.
         _drift = Offset(
-          _random.nextDouble() * 40 - 20,
-          _random.nextDouble() * 80 - 40,
+          _random.nextDouble() * 2 - 1,
+          _random.nextDouble() * 2 - 1,
         );
       });
       _updateBatteryLevel();
@@ -283,11 +294,16 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// The bar's thickness, off the panel's short side so it stays the same
+  /// size whichever way up the phone is. [_buildBatteryBar] and the gap kept
+  /// clear for it in [build] both size off this.
+  double _barHeight(double span) => max(3.0, span * 0.014);
+
   /// A plain capsule bar — no battery outline, no percentage. The fill length
   /// is the charge and its colour is the warning; a bolt appears when charging.
-  Widget _buildBatteryBar(double width) {
+  Widget _buildBatteryBar(double span) {
     final level = _batteryLevel.clamp(0, 100);
-    final barH = max(3.0, width * 0.014);
+    final barH = _barHeight(span);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -300,7 +316,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
           SizedBox(width: barH * 0.6),
         ],
         Container(
-          width: width * 0.48,
+          width: span * 0.48,
           height: barH,
           decoration: BoxDecoration(
             color: _white.withValues(alpha: 0.14),
@@ -379,15 +395,43 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
           builder: (context, constraints) {
             final w = constraints.maxWidth;
             final h = constraints.maxHeight;
+            // The stand holds the phone upright on the charger; turned on
+            // its side it slides off the coil and stops charging, so both
+            // ways up have to read as a clock.
+            final landscape = w > h;
+
+            // Burn-in drift wanders further along the panel's long axis.
+            final driftX = landscape ? 40.0 : 20.0;
+            final driftY = landscape ? 20.0 : 40.0;
+
             // Portrait stacks HH over MM, so two glyphs — not five — set
-            // the width. This overshoots on purpose: the FittedBox below
-            // scales the column down until it fills the panel exactly.
-            final digitSize = min(w * 1.15, h * 0.55);
-            // The measured width of the two stacked digits (DSEG7 advances
-            // ~0.485em, plus tracking either side). Everything below the
-            // minutes is held to this, so the digits are what the outer
-            // FittedBox scales to fill the panel.
-            final faceWidth = digitSize * 0.83;
+            // the width; landscape has room for HH:MM across. Both
+            // overshoot on purpose: the FittedBox below scales the column
+            // down until it fills the panel, and scaleDown never scales up.
+            final digitSize = landscape
+                ? min(w * 0.55, h * 1.15)
+                : min(w * 1.15, h * 0.55);
+            // The time's own width. Measured at this tracking: DSEG7
+            // advances 0.676 * digitSize per digit, 0.196 for the colon.
+            final timeWidth = digitSize * (landscape ? 2.902 : 1.353);
+            // Everything under the time is held to this — otherwise a long
+            // date sets the width and the digits shrink to suit. Narrower
+            // than the time on purpose: a full-width rule reads as an
+            // underline rather than a divider.
+            final faceWidth = timeWidth * 0.61;
+            // Landscape is short, so the rows under the time close up.
+            final gap = digitSize * (landscape ? 0.07 : 0.11);
+            final tightGap = gap * 0.64; // Seconds hug the time.
+            // The bar sits off the panel's short side — the same size and
+            // the same distance from the edge whichever way up the phone is.
+            final barSpan = min(w, h);
+            final barInset = barSpan * 0.05;
+            // Height kept clear at the foot of the panel, so a face that runs
+            // out of room can't grow down into the bar. The allowance is for
+            // the bolt, which is the tallest the row ever gets.
+            final barZone = _batteryLevel >= 0
+                ? barInset + _barHeight(barSpan) * 3.2 + 12
+                : 0.0;
             // DSEG7 covers digits and the colon only; everything else below
             // deliberately falls back to the platform font.
             final digitStyle = TextStyle(
@@ -410,39 +454,61 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               letterSpacing: digitSize * 0.016,
             );
 
+            // Hours over minutes on the narrow panel — worth roughly 2.5x
+            // the glyph height one "HH:MM" line would fit. Across the wide
+            // one there's room for the whole time on a single line.
+            final time = landscape
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _segments(hh, digitStyle),
+                      // Lit either way on a real panel, so no layer behind.
+                      Text(':', style: digitStyle),
+                      _segments(mm, digitStyle),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _segments(hh, digitStyle),
+                      SizedBox(height: digitSize * 0.05),
+                      _segments(mm, digitStyle),
+                    ],
+                  );
+
             // A plain translate: the drift jump costs one frame, where an
             // animated slide would render ~120 frames every minute.
             return Transform.translate(
-              offset: _drift,
+              offset: Offset(_drift.dx * driftX, _drift.dy * driftY),
               child: Opacity(
                 opacity: _pixelOpacity,
                 child: Stack(
                   children: [
-                    // Inset by the drift range (±20 × ±40) so the face never
-                    // wanders off the panel edge.
+                    // Inset by the drift range so the face never wanders
+                    // off the panel edge, and by the battery bar's height
+                    // at the foot so the two can't meet.
                     Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 44,
+                        padding: EdgeInsets.fromLTRB(
+                          driftX + 4,
+                          driftY + 4,
+                          driftX + 4,
+                          driftY + 4 + barZone,
                         ),
-                        child: Center(
-                          // scaleDown fits the stack to the panel: two
-                          // digits wide is what binds, so this fills the
-                          // width without ever wrapping or clipping.
+                        child: FractionallySizedBox(
+                          widthFactor: _faceScale,
+                          heightFactor: _faceScale,
+                          // scaleDown fits the stack to that box: the time
+                          // is what binds, so this fills it without ever
+                          // wrapping or clipping.
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                // Hours over minutes: on a narrow panel this
-                                // buys roughly 2.5x the glyph height that one
-                                // "HH:MM" line would fit.
-                                _segments(hh, digitStyle),
-                                SizedBox(height: digitSize * 0.05),
-                                _segments(mm, digitStyle),
+                                time,
                                 if (_showSeconds || !_use24h) ...[
-                                  SizedBox(height: digitSize * 0.07),
+                                  SizedBox(height: tightGap),
                                   _capWidth(
                                     faceWidth,
                                     Row(
@@ -469,7 +535,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ],
-                                SizedBox(height: digitSize * 0.11),
+                                SizedBox(height: gap),
                                 Container(
                                   width: faceWidth,
                                   height: max(1.5, digitSize * 0.0045),
@@ -484,7 +550,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ),
-                                SizedBox(height: digitSize * 0.11),
+                                SizedBox(height: gap),
                                 _capWidth(
                                   faceWidth,
                                   Text.rich(
@@ -525,21 +591,27 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                       Positioned(
                         left: 0,
                         right: 0,
-                        bottom: h * 0.05,
-                        child: Center(child: _buildBatteryBar(w)),
+                        bottom: barInset,
+                        child: Center(child: _buildBatteryBar(barSpan)),
                       ),
                     if (_showHint)
                       Positioned(
                         left: 0,
                         right: 0,
-                        top: h * 0.04,
-                        child: Text(
-                          'hold: 12/24h  ·  double-tap: seconds\nswipe up/down: dim',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.35),
-                            fontSize: 13,
-                            height: 1.6,
+                        // Landscape leaves no headroom over the digits, so
+                        // the hint sits right at the edge and on one line.
+                        top: landscape ? 4.0 : barSpan * 0.08,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'hold: 12/24h  ·  double-tap: seconds  ·  swipe: dim',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.35),
+                                fontSize: 13,
+                              ),
+                            ),
                           ),
                         ),
                       ),

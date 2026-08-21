@@ -1,10 +1,15 @@
 # Night Clock
 
-A bedside nightstand clock (Flutter) for a repurposed Galaxy Note 8, made
-for a vertical phone stand: portrait, with the hours stacked over the
-minutes so the digits fill the width of the panel, a fading hairline and
-the date beneath them, on a true-black AMOLED-friendly background. The
-screen stays on via `wakelock_plus`.
+A bedside nightstand clock (Flutter) for a repurposed Galaxy Note 8, on a
+true-black AMOLED-friendly background. The screen stays on via
+`wakelock_plus`.
+
+It turns whichever way the phone is standing. Upright, the hours stack over
+the minutes; on its side, the whole `HH:MM` runs across one line. Either
+way the face fills four fifths of the panel. Either way a fading hairline and the
+date sit beneath the time. That matters on a wireless charger: lay the
+phone on its side once it's full and it slips off the coil and stops
+charging, without giving up the clock.
 
 The palette is white and red only: the time is white, the date is red, and
 every digit "1" renders red.
@@ -15,14 +20,17 @@ every digit "1" renders red.
 - **Long-press** — toggle 12/24-hour
 - **Double-tap** — show/hide seconds
 
-Seconds and AM/PM share a small row under the minutes. Settings persist
-across launches. The whole display wanders within a ±20 × ±40 px region,
+Seconds and AM/PM share a small row under the time. Settings persist
+across launches. The whole display wanders within a ±20 × ±40 px region
+(±40 × ±20 on its side — always wider along the panel's long axis),
 jumping to a new spot every minute, so no pixel holds a static image —
 AMOLED burn-in protection.
 
 At the bottom sits a plain capsule bar — no battery outline, no percentage.
 Its length is the charge and its colour is the warning, lerped green (100%)
-through amber (50%) to red (0%). A bolt appears to its left while charging.
+through amber (50%) to red (0%). A bolt appears to its left while charging,
+so it doubles as the answer to "is it still charging?" after a rotation. It
+sizes off the panel's short side, so it's the same bar either way up.
 
 Every digit is drawn over its own unlit segments — a faint all-8s layer at
 11% opacity — so the display reads like a real 7-segment panel rather than
@@ -72,6 +80,8 @@ Prebuilt APKs land in `build/app/outputs/flutter-apk/`; the Note 8 wants the
 ## Bedside tips
 
 - Keep the phone on a charger; wakelock keeps the screen on indefinitely.
+- The app rotates on its own (`fullSensor`), so the system auto-rotate
+  toggle doesn't have to be on for it to follow the stand.
 - Brightness is handled in-app now — just swipe. Turn off adaptive brightness
   (Settings → Display) so the system doesn't fight the app.
 - Samsung "Edge panel" shows a handle on the left edge; disable it in
