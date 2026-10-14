@@ -1,8 +1,10 @@
 # Night Clock
 
-A bedside nightstand clock (Flutter) for a repurposed Galaxy Note 8, on a
-true-black AMOLED-friendly background. The screen stays on via
-`wakelock_plus`.
+A bedside nightstand clock and smart-light dashboard (Flutter) for a
+repurposed Galaxy Note 8, on a true-black AMOLED-friendly background. The
+screen stays on via `wakelock_plus`. Under the clock sits a panel for your
+TP-Link Tapo and Xiaomi Mi/Mijia bulbs, controlled straight over your home
+Wi-Fi — see [Smart lights](#smart-lights).
 
 It turns whichever way the phone is standing. Upright, the hours stack over
 the minutes; on its side, the whole `HH:MM` runs across one line. Either
@@ -11,8 +13,9 @@ date sit beneath the time. That matters on a wireless charger: lay the
 phone on its side once it's full and it slips off the coil and stops
 charging, without giving up the clock.
 
-The palette is white and red only: the time is white, the date is red, and
-every digit "1" renders red.
+The clock's palette is white and red only: the time is white, the date is
+red, and every digit "1" renders red. The light tiles are the one place
+with more colour — each glows in its bulb's own shade when it's on.
 
 ## Gestures
 
@@ -36,6 +39,98 @@ Every digit is drawn over its own unlit segments — a faint all-8s layer at
 11% opacity — so the display reads like a real 7-segment panel rather than
 floating glyphs.
 
+## Smart lights
+
+The dashboard controls bulbs **locally** — the phone talks to each bulb on
+your Wi-Fi directly, with no cloud, hub, or vendor app involved.
+
+- **TP-Link Tapo** bulbs (L510, L530, …) on current firmware (KLAP protocol)
+- **Xiaomi Mi / Mijia** bulbs (miIO protocol — both newer MIoT and older
+  Yeelight-made models; the app works out which on first use)
+
+Each light gets a tile with its state, a power button, and — for lights you
+mark dimmable — **1%** and **100%** buttons and a brightness bar. **ALL
+OFF** in the header switches everything off. States refresh every 15 s.
+
+The panel only appears when the app is built with a `lights.json`; without
+one you get the plain clock.
+
+### Setup
+
+1. **Copy the template.** `lights.json` is gitignored, so your addresses
+   and keys never end up in the repo:
+
+   ```sh
+   cp lights.example.json lights.json
+   ```
+
+2. **Give each bulb a fixed IP.** Add a DHCP reservation for each bulb in
+   your router, or its address can change after a router reboot and the
+   tile goes *Offline*.
+
+3. **Tapo — `TAPO_HASH` and `TAPO_LIGHTS`.** Run:
+
+   ```sh
+   python3 tool/tapo_hash.py
+   ```
+
+   It asks for your Tapo account email and password and prints a 64-character
+   hash; paste it as `TAPO_HASH`. The bulbs authenticate against this hash,
+   so the app never stores your password. Find each bulb's IP in the Tapo app
+   (device → ⚙ → Device Info) and list them as `Name=IP`:
+
+   ```json
+   "TAPO_LIGHTS": "Warm Light=192.168.1.20"
+   ```
+
+4. **Xiaomi — `MI_LIGHTS`.** Each Mi bulb has a secret 32-character token,
+   fetched once from your Xiaomi account with
+   [Xiaomi-cloud-tokens-extractor](https://github.com/PiotrMachowski/Xiaomi-cloud-tokens-extractor).
+   On a Mac with Homebrew Python its one-line installer fails
+   (`externally-managed-environment`), so run it in a virtualenv instead:
+
+   ```sh
+   mkdir -p ~/xiaomi-tokens && cd ~/xiaomi-tokens
+   curl -L -o token_extractor.zip https://github.com/PiotrMachowski/Xiaomi-cloud-tokens-extractor/releases/latest/download/token_extractor.zip
+   unzip token_extractor.zip && cd token_extractor
+   python3 -m venv venv && venv/bin/pip install -r requirements.txt
+   venv/bin/python token_extractor.py
+   ```
+
+   Log in (password or QR code), press Enter to search every server region,
+   and copy the **IP** and **TOKEN** of each bulb as `Name=IP/token`:
+
+   ```json
+   "MI_LIGHTS": "White Light=192.168.1.30/0123456789abcdef0123456789abcdef"
+   ```
+
+5. **Choose which lights dim — `DIMMABLE_LIGHTS`.** A comma-separated list
+   of names that should get the 1% / 100% buttons; any light left out gets
+   just the power button:
+
+   ```json
+   "DIMMABLE_LIGHTS": "Warm Light"
+   ```
+
+6. **Build with the file** (see [Build & install](#build--install)).
+
+Several lights of one kind are comma-separated: `"Bed=…, Desk=…"`. A tile's
+glow is read off its name — cool white if it contains "white" or "cool",
+warm amber otherwise.
+
+**Troubleshooting**
+
+- *Every tile Offline* — the phone isn't on Wi-Fi. Airplane mode is fine,
+  but Wi-Fi has to be switched back on.
+- *One tile Offline* — check its IP still matches (fixed IP, step 2).
+- *A light is missing entirely* — its `TAPO_HASH` or token isn't valid hex
+  of the right length (a leftover placeholder, say); the app skips it
+  rather than crash.
+
+**Security:** the hash and tokens are compiled into the APK. Anyone with the
+APK file and access to your Wi-Fi could switch your lights — but neither
+gives access to your Tapo or Xiaomi account.
+
 ## Font
 
 One face: **DSEG7 Classic**, the 7-segment digital clock font (SIL OFL, by
@@ -44,10 +139,11 @@ only, so the date and AM/PM deliberately fall back to the platform font.
 
 ## Battery
 
-With seconds hidden the app redraws about twice per minute (minute change +
-burn-in drift), and it runs no background work at all — no services, no
-background permissions, and both timers stop when the app isn't visible. So
-nearly all drain is the screen itself being on.
+With seconds hidden the clock redraws about twice per minute (minute change +
+burn-in drift), and the light panel polls the bulbs every 15 s. It runs no
+background work at all — no services, no background permissions, and every
+timer stops when the app isn't visible. So nearly all drain is the screen
+itself being on.
 
 The dimmer therefore drives the panel, not just the pixels. Swiping runs a
 two-stage control:
@@ -70,9 +166,12 @@ To cut everything else on the phone, see **Bedside tips** below.
 ## Build & install
 
 ```sh
-flutter build apk --release --split-per-abi
+flutter build apk --release --split-per-abi --dart-define-from-file=lights.json
 adb install -r build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 ```
+
+Leave out `--dart-define-from-file=lights.json` to build the clock without
+the lights panel.
 
 Prebuilt APKs land in `build/app/outputs/flutter-apk/`; the Note 8 wants the
 `arm64-v8a` one (`app-release.apk` is the universal fallback).
@@ -93,7 +192,8 @@ The app itself does nothing in the background, so anything left is the rest
 of the phone:
 
 - **Airplane mode on.** A cellular radio hunting for signal in a nightstand
-  corner is the single biggest drain. Re-enable Wi-Fi separately if wanted.
+  corner is the single biggest drain. Turn Wi-Fi back on afterwards — the
+  light controls need it.
 - Bluetooth, NFC, Location, Mobile data, Hotspot — off.
 - Settings → Accounts and backup → Accounts → **Auto sync data** off.
 - Device care → Battery → ⋮ → Settings → turn on *Put unused apps to sleep*
