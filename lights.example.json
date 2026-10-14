@@ -1,0 +1,6 @@
+{
+  "TAPO_HASH": "output of: python3 tool/tapo_hash.py",
+  "TAPO_LIGHTS": "Bed=192.168.1.20, Desk=192.168.1.21",
+  "MI_LIGHTS": "Lamp=192.168.1.30/0123456789abcdef0123456789abcdef",
+  "DIMMABLE_LIGHTS": "Bed"
+}

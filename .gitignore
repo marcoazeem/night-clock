@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Light addresses and keys — passed with --dart-define-from-file, never committed
+/lights.json

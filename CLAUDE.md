@@ -10,8 +10,10 @@ and a battery bar sits at the foot, on a true-black background for AMOLED.
 (A month calendar used to sit on the right in landscape; the user removed
 it as redundant — don't reintroduce it, in either orientation.)
 
-Deliberately minimal — the user has stripped this down twice. One font, two
-colours, no icon chrome. Don't add faces, themes, or decoration back.
+Since Oct 2026 it's a bedside *dashboard*: the clock plus a panel of the
+user's smart lights (see Lights below). The phone now lives on the charger,
+so battery saving no longer constrains design. The clock itself stays as
+spare as before — one font, two colours; don't add faces or themes back.
 
 ## Target device
 
@@ -41,7 +43,7 @@ colours, no icon chrome. Don't add faces, themes, or decoration back.
 ```sh
 ~/FlutterDev/flutter/bin/flutter analyze
 ~/FlutterDev/flutter/bin/flutter test
-~/FlutterDev/flutter/bin/flutter build apk --release --split-per-abi
+~/FlutterDev/flutter/bin/flutter build apk --release --split-per-abi --dart-define-from-file=lights.json
 adb -s ce0617165451ea26057e install -r build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 adb -s ce0617165451ea26057e push build/app/outputs/flutter-apk/app-arm64-v8a-release.apk /sdcard/Download/night-clock.apk
 ```
@@ -49,7 +51,10 @@ adb -s ce0617165451ea26057e push build/app/outputs/flutter-apk/app-arm64-v8a-rel
 After every install, also refresh the `/sdcard/Download/night-clock.apk`
 copy (the user keeps it for reinstalling without the Mac).
 
-## Architecture (single file: lib/main.dart)
+Always build with `--dart-define-from-file=lights.json` — without it the
+app builds fine but the lights panel silently disappears.
+
+## Architecture (lib/main.dart, plus lib/lights.dart)
 
 - Layout: one `LayoutBuilder` branch on `w > h`. Portrait is `HH` on one
   line with `MM` under it and no colon; landscape is `HH:MM` across. Then,
@@ -95,16 +100,45 @@ copy (the user keeps it for reinstalling without the Mac).
   system setting untouched, reset on pause/dispose, re-asserted on resume
   and post-first-frame); below it the backlight is at hardware floor and
   `_pixelOpacity` fades pixels down to 0.12.
-- Battery discipline (do not regress): one redraw per minute when seconds
-  are hidden (`_scheduleTick` targets the next boundary), burn-in drift is
-  an instant jump (never animate it), all timers stop when the app is not
-  visible (`didChangeAppLifecycleState`).
+- Timers still stop when the app is not visible
+  (`didChangeAppLifecycleState`) and drift is still an instant jump, but
+  battery cost is no longer a reason to reject a feature — the user said the
+  phone is always on the wireless charger now.
 - Burn-in protection: whole display wanders each minute — ±20×±40 px in
   portrait, ±40×±20 in landscape (wider along the panel's long axis).
   `_drift` holds a unit offset in [-1, 1]² and `build` scales it, so the
   range follows a rotation without the timer knowing the size. The face is
   inset by `drift + 4` on each edge to match, so drift never pushes
   content offscreen.
+
+## Lights (lib/lights.dart, `LightsPanel` in main.dart)
+
+- Local-network only, no cloud. Tapo bulbs over KLAP v2 (HTTP: handshake1/2,
+  AES-CBC, signed seq); Mi/Mijia bulbs over miIO (UDP 54321, md5(token)
+  key). Mi tries MIoT `set_properties` (siid 2: piid 1 on, piid 2
+  brightness) and falls back to legacy `set_power`/`set_bright`.
+- The user's two bulbs: the Tapo is "Warm Light" (dimmable: power + 1% /
+  100% + brightness bar), the Mi is "White Light" (power only). Which
+  lights get dimming is `DIMMABLE_LIGHTS` in lights.json, not the brand.
+- Dashboard styling: the clock keeps its two colours, but the light tiles
+  are free to use colour and icons (the user asked for it). Each tile glows
+  in its light's colour when on — `_glowFor` reads it off the name (cool
+  white for "white"/"cool", amber otherwise). Header has an ALL OFF button.
+  Panel sits under the clock in portrait (on/off lights 2-up when there
+  are two or more, dimmable lights full width), to its right in landscape.
+  Polls state every 15 s while visible.
+- Config is `lights.json` (gitignored; template in lights.example.json),
+  passed as dart-defines. The repo is public — never commit IPs or keys.
+  `TAPO_HASH` is sha256(sha1(email)+sha1(password)) from
+  `tool/tapo_hash.py`, so the APK never holds the Tapo password. Mi tokens
+  come from Xiaomi-cloud-tokens-extractor.
+- lights.dart has no Flutter imports so it runs under plain `dart` on the
+  Mac (`dart run --packages=.dart_tool/package_config.json script.dart`)
+  — test protocol changes against the real bulbs or a python-kasa fake.
+- The Tapo bulb's HTTP server needs a fixed `Content-Length` (dart:io
+  chunks by default) and matches header names case-sensitively — dart:io's
+  lowercase `content-length` gets HTTP 400. Headers are set with
+  `preserveHeaderCase: true`; keep it. Verified against the real bulb.
 
 ## Fonts (fonts/)
 

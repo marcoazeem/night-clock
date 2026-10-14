@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Talks to the bedroom lights over the home Wi-Fi. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Night Clock"
         android:name="${applicationName}"

@@ -8,6 +8,8 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'lights.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // All four ways up: the phone stands portrait on the wireless charger and
@@ -167,6 +169,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   bool _showHint = true;
 
   final _battery = Battery();
+  final _lights = configuredLights();
   final _random = Random();
   Timer? _tick;
   Timer? _driftTimer;
@@ -495,95 +498,134 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                           driftX + 4,
                           driftY + 4 + barZone,
                         ),
-                        child: FractionallySizedBox(
-                          widthFactor: _faceScale,
-                          heightFactor: _faceScale,
-                          // scaleDown fits the stack to that box: the time
-                          // is what binds, so this fills it without ever
-                          // wrapping or clipping.
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                time,
-                                if (_showSeconds || !_use24h) ...[
-                                  SizedBox(height: tightGap),
-                                  _capWidth(
-                                    faceWidth,
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        if (_showSeconds)
-                                          _segments(
-                                            ss,
-                                            digitStyle.copyWith(
-                                              fontSize: digitSize * 0.12,
-                                              fontWeight: FontWeight.w600,
-                                              color: _white.withValues(
-                                                alpha: 0.5,
+                        // The dashboard: the clock takes what the lights
+                        // leave — under it standing, beside it on its side.
+                        child: Flex(
+                          direction: landscape
+                              ? Axis.horizontal
+                              : Axis.vertical,
+                          children: [
+                            Expanded(
+                              child: FractionallySizedBox(
+                                widthFactor: _faceScale,
+                                heightFactor: _faceScale,
+                                // scaleDown fits the stack to that box: the time
+                                // is what binds, so this fills it without ever
+                                // wrapping or clipping.
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      time,
+                                      if (_showSeconds || !_use24h) ...[
+                                        SizedBox(height: tightGap),
+                                        _capWidth(
+                                          faceWidth,
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              if (_showSeconds)
+                                                _segments(
+                                                  ss,
+                                                  digitStyle.copyWith(
+                                                    fontSize: digitSize * 0.12,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: _white.withValues(
+                                                      alpha: 0.5,
+                                                    ),
+                                                  ),
+                                                ),
+                                              if (_showSeconds && !_use24h)
+                                                SizedBox(
+                                                  width: digitSize * 0.05,
+                                                ),
+                                              if (!_use24h)
+                                                Text(ampm, style: smallStyle),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                      SizedBox(height: gap),
+                                      Container(
+                                        width: faceWidth,
+                                        height: max(1.5, digitSize * 0.0045),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            2,
+                                          ),
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              _white.withValues(alpha: 0),
+                                              _white.withValues(alpha: 0.55),
+                                              _white.withValues(alpha: 0),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(height: gap),
+                                      _capWidth(
+                                        faceWidth,
+                                        Text.rich(
+                                          TextSpan(
+                                            children: [
+                                              TextSpan(
+                                                text:
+                                                    _weekdays[_now.weekday - 1]
+                                                        .toUpperCase(),
+                                                style: dateStyle.copyWith(
+                                                  color: _red,
+                                                ),
                                               ),
-                                            ),
-                                          ),
-                                        if (_showSeconds && !_use24h)
-                                          SizedBox(width: digitSize * 0.05),
-                                        if (!_use24h)
-                                          Text(ampm, style: smallStyle),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                                SizedBox(height: gap),
-                                Container(
-                                  width: faceWidth,
-                                  height: max(1.5, digitSize * 0.0045),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(2),
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        _white.withValues(alpha: 0),
-                                        _white.withValues(alpha: 0.55),
-                                        _white.withValues(alpha: 0),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: gap),
-                                _capWidth(
-                                  faceWidth,
-                                  Text.rich(
-                                    TextSpan(
-                                      children: [
-                                        TextSpan(
-                                          text: _weekdays[_now.weekday - 1]
-                                              .toUpperCase(),
-                                          style: dateStyle.copyWith(
-                                            color: _red,
+                                              TextSpan(
+                                                text: '  ·  ',
+                                                style: dateStyle.copyWith(
+                                                  color: _red.withValues(
+                                                    alpha: 0.4,
+                                                  ),
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text:
+                                                    '${_months[_now.month - 1]} ${_now.day}'
+                                                        .toUpperCase(),
+                                                style: dateStyle.copyWith(
+                                                  color: _red.withValues(
+                                                    alpha: 0.9,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        TextSpan(
-                                          text: '  ·  ',
-                                          style: dateStyle.copyWith(
-                                            color: _red.withValues(alpha: 0.4),
-                                          ),
-                                        ),
-                                        TextSpan(
-                                          text:
-                                              '${_months[_now.month - 1]} ${_now.day}'
-                                                  .toUpperCase(),
-                                          style: dateStyle.copyWith(
-                                            color: _red.withValues(alpha: 0.9),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                            if (_lights.isNotEmpty)
+                              Padding(
+                                padding: landscape
+                                    ? EdgeInsets.only(left: barSpan * 0.04)
+                                    : EdgeInsets.only(top: barSpan * 0.04),
+                                // Scales down rather than overflowing when
+                                // there are more lights than room on its side.
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: LightsPanel(
+                                    lights: _lights,
+                                    width: landscape
+                                        ? w * 0.36
+                                        : w - 2 * (driftX + 4),
+                                    columns: landscape ? 1 : 2,
+                                    unit: barSpan * 0.034,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),
@@ -624,4 +666,455 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+/// The lights half of the dashboard: a tile per configured light with its
+/// live state and its buttons. It polls every 15 s while the app is on
+/// screen — the phone lives on the charger, so that's not worth saving.
+class LightsPanel extends StatefulWidget {
+  const LightsPanel({
+    super.key,
+    required this.lights,
+    required this.width,
+    required this.columns,
+    required this.unit,
+  });
+
+  final List<Light> lights;
+  final double width;
+  final int columns;
+
+  /// Base text size; the tiles are proportioned off it.
+  final double unit;
+
+  @override
+  State<LightsPanel> createState() => _LightsPanelState();
+}
+
+class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
+  final _states = <Light, LightState>{};
+  final _offline = <Light>{};
+  final _busy = <Light>{};
+  Timer? _poll;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    _refreshAll();
+    _poll = Timer.periodic(const Duration(seconds: 15), (_) => _refreshAll());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startPolling();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _poll?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  void _refreshAll() {
+    for (final light in widget.lights) {
+      if (!_busy.contains(light)) _refresh(light);
+    }
+  }
+
+  Future<void> _refresh(Light light) async {
+    try {
+      final state = await light.state();
+      if (mounted) {
+        setState(() {
+          _states[light] = state;
+          _offline.remove(light);
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _offline.add(light));
+    }
+  }
+
+  /// Sends [action], shows [expected] straight away if it went through, then
+  /// reads the bulb back to confirm.
+  Future<void> _run(
+    Light light,
+    Future<void> Function() action,
+    LightState expected,
+  ) async {
+    setState(() => _busy.add(light));
+    try {
+      await action();
+      _states[light] = expected;
+      _offline.remove(light);
+    } catch (_) {
+      _offline.add(light);
+    }
+    if (!mounted) return;
+    setState(() => _busy.remove(light));
+    _refresh(light);
+  }
+
+  void _allOff() {
+    for (final light in widget.lights) {
+      if (_states[light]?.on == true) {
+        _run(
+          light,
+          () => light.setPower(false),
+          LightState(false, _states[light]?.brightness),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final u = widget.unit;
+    final gap = u * 0.8;
+    final tileWidth =
+        (widget.width - gap * (widget.columns - 1)) / widget.columns;
+    final anyOn = _states.values.any((s) => s.on);
+    return SizedBox(
+      width: widget.width,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.home_rounded,
+                size: u * 1.2,
+                color: _white.withValues(alpha: 0.45),
+              ),
+              SizedBox(width: u * 0.5),
+              Text(
+                'LIGHTS',
+                style: TextStyle(
+                  color: _white.withValues(alpha: 0.45),
+                  fontSize: u * 0.85,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: u * 0.2,
+                ),
+              ),
+              const Spacer(),
+              // One tap for bedtime.
+              _chip(
+                Icons.power_settings_new_rounded,
+                'ALL OFF',
+                active: false,
+                color: _white,
+                enabled: anyOn,
+                onTap: _allOff,
+              ),
+            ],
+          ),
+          SizedBox(height: gap),
+          Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              // A dimmable light needs the whole row for its controls, as
+              // does an on/off light with no partner to share it.
+              for (final light in widget.lights)
+                _tile(
+                  light,
+                  light.dimmable ||
+                          widget.lights.where((l) => !l.dimmable).length < 2
+                      ? widget.width
+                      : tileWidth,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tile(Light light, double width) {
+    final u = widget.unit;
+    final glow = _glowFor(light);
+    final state = _states[light];
+    final on = state?.on == true;
+    final level = state?.brightness;
+    final offline = _offline.contains(light);
+    final busy = _busy.contains(light);
+    final status = offline
+        ? 'Offline'
+        : state == null
+        ? 'Connecting…'
+        : !on
+        ? 'Off'
+        : light.dimmable && level != null
+        ? 'On · $level%'
+        : 'On';
+    final accent = offline
+        ? _red
+        : (on ? glow : _white.withValues(alpha: 0.45));
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      width: width,
+      padding: EdgeInsets.all(u * 0.9),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(u * 1.2),
+        color: on ? null : const Color(0xFF0E0E10),
+        gradient: on
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  glow.withValues(alpha: 0.24),
+                  glow.withValues(alpha: 0.05),
+                ],
+              )
+            : null,
+        border: Border.all(
+          color: on
+              ? glow.withValues(alpha: 0.55)
+              : offline
+              ? _red.withValues(alpha: 0.35)
+              : const Color(0xFF26262A),
+        ),
+        boxShadow: on
+            ? [
+                BoxShadow(
+                  color: glow.withValues(alpha: 0.18),
+                  blurRadius: u * 2,
+                ),
+              ]
+            : null,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              // The bulb, lit in its own colour.
+              Container(
+                width: u * 3,
+                height: u * 3,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: on
+                      ? glow.withValues(alpha: 0.22)
+                      : const Color(0xFF1C1C20),
+                  boxShadow: on
+                      ? [
+                          BoxShadow(
+                            color: glow.withValues(alpha: 0.55),
+                            blurRadius: u * 1.4,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Icon(
+                  offline
+                      ? Icons.wifi_off_rounded
+                      : on
+                      ? Icons.lightbulb_rounded
+                      : Icons.lightbulb_outline_rounded,
+                  size: u * 1.7,
+                  color: accent,
+                ),
+              ),
+              SizedBox(width: u * 0.9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      light.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _white.withValues(alpha: on ? 0.95 : 0.7),
+                        fontSize: u * 1.1,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: u * 0.15),
+                    Text(
+                      status,
+                      style: TextStyle(color: accent, fontSize: u * 0.85),
+                    ),
+                  ],
+                ),
+              ),
+              // Power: on when off, off when on.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: busy
+                    ? null
+                    : () => _run(
+                        light,
+                        () => light.setPower(!on),
+                        LightState(!on, level),
+                      ),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: u * 3.2,
+                  height: u * 3.2,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: on ? glow : const Color(0xFF1C1C20),
+                    border: Border.all(
+                      color: on ? glow : _white.withValues(alpha: 0.18),
+                    ),
+                  ),
+                  child: busy
+                      ? Padding(
+                          padding: EdgeInsets.all(u * 0.9),
+                          child: CircularProgressIndicator(
+                            strokeWidth: u * 0.15,
+                            color: on ? Colors.black : _white,
+                          ),
+                        )
+                      : Icon(
+                          Icons.power_settings_new_rounded,
+                          size: u * 1.6,
+                          color: on
+                              ? Colors.black
+                              : _white.withValues(alpha: 0.7),
+                        ),
+                ),
+              ),
+            ],
+          ),
+          if (light.dimmable) ...[
+            SizedBox(height: u * 1),
+            // Brightness, as a bar in the light's colour.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(u),
+              child: SizedBox(
+                height: u * 0.35,
+                child: Stack(
+                  children: [
+                    Container(color: _white.withValues(alpha: 0.08)),
+                    FractionallySizedBox(
+                      widthFactor: on && level != null
+                          ? level.clamp(1, 100) / 100
+                          : 0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [glow.withValues(alpha: 0.5), glow],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: u * 0.9),
+            Row(
+              children: [
+                Expanded(
+                  child: _chip(
+                    Icons.brightness_low_rounded,
+                    '1%',
+                    active: on && level == 1,
+                    color: glow,
+                    enabled: !busy,
+                    onTap: () => _run(
+                      light,
+                      () => light.setBrightness(1),
+                      const LightState(true, 1),
+                    ),
+                  ),
+                ),
+                SizedBox(width: u * 0.6),
+                Expanded(
+                  child: _chip(
+                    Icons.brightness_high_rounded,
+                    '100%',
+                    active: on && level == 100,
+                    color: glow,
+                    enabled: !busy,
+                    onTap: () => _run(
+                      light,
+                      () => light.setBrightness(100),
+                      const LightState(true, 100),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// A pill with an icon; [active] fills it in [color] to mark the setting
+  /// the bulb is at.
+  Widget _chip(
+    IconData icon,
+    String label, {
+    required bool active,
+    required Color color,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    final u = widget.unit;
+    final fg = active
+        ? Colors.black
+        : _white.withValues(alpha: enabled ? 0.75 : 0.3);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        height: u * 2.6,
+        padding: EdgeInsets.symmetric(horizontal: u * 0.9),
+        decoration: BoxDecoration(
+          color: active ? color : const Color(0xFF16161A),
+          border: Border.all(
+            color: active ? color : _white.withValues(alpha: 0.12),
+          ),
+          borderRadius: BorderRadius.circular(u * 1.3),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: u * 1.2, color: fg),
+            SizedBox(width: u * 0.4),
+            Text(
+              label,
+              style: TextStyle(
+                color: fg,
+                fontSize: u * 0.85,
+                fontWeight: FontWeight.w600,
+                letterSpacing: u * 0.06,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A light's glow colour, read off its name: cool white for a "white" or
+/// "cool" light, warm amber for anything else. Only the lights get colour
+/// like this — the clock keeps its white and red.
+Color _glowFor(Light light) {
+  final name = light.name.toLowerCase();
+  return name.contains('white') || name.contains('cool')
+      ? const Color(0xFFD6E6FF)
+      : const Color(0xFFFFB04A);
 }
