@@ -3,13 +3,13 @@
 A bedside nightstand clock and smart-light dashboard (Flutter) for a
 repurposed Galaxy Note 8, on a true-black AMOLED-friendly background. The
 screen stays on via `wakelock_plus`. Under the clock sits a panel for your
-TP-Link Tapo and Xiaomi Mi/Mijia bulbs, controlled straight over your home
-Wi-Fi — see [Smart lights](#smart-lights).
+TP-Link Tapo and Xiaomi Mi/Mijia bulbs and a Gree air conditioner, all on
+one page and controlled straight over your home Wi-Fi. See
+[Smart lights](#smart-lights) and [Air conditioner](#air-conditioner).
 
-It turns whichever way the phone is standing. Upright, the hours stack over
-the minutes; on its side, the whole `HH:MM` runs across one line. Either
-way the face fills four fifths of the panel. Either way a fading hairline and the
-date sit beneath the time. That matters on a wireless charger: lay the
+It turns whichever way the phone is standing. Either way the time is one
+`HH:MM` line with a fading hairline and the date beneath it: upright it
+spans the width above the lights; on its side it sits to their left. That matters on a wireless charger: lay the
 phone on its side once it's full and it slips off the coil and stops
 charging, without giving up the clock.
 
@@ -48,9 +48,10 @@ your Wi-Fi directly, with no cloud, hub, or vendor app involved.
 - **Xiaomi Mi / Mijia** bulbs (miIO protocol — both newer MIoT and older
   Yeelight-made models; the app works out which on first use)
 
-Each light gets a tile with its state, a power button, and — for lights you
-mark dimmable — **1%** and **100%** buttons and a brightness bar. **ALL
-OFF** in the header switches everything off. States refresh every 15 s.
+Each light gets a square frosted tile with a power button and — for
+lights you mark dimmable — **1% / 25% / 50% / 100%** presets. The power
+button lights up while the bulb is on, and so does the preset nearest its
+brightness. **ALL OFF** in the header switches everything off. States refresh every 15 s.
 
 The panel only appears when the app is built with a `lights.json`; without
 one you get the plain clock.
@@ -105,8 +106,8 @@ one you get the plain clock.
    ```
 
 5. **Choose which lights dim — `DIMMABLE_LIGHTS`.** A comma-separated list
-   of names that should get the 1% / 100% buttons; any light left out gets
-   just the power button:
+   of names that should get the 1 / 25 / 50 / 100% presets;
+   any light left out gets just the power button:
 
    ```json
    "DIMMABLE_LIGHTS": "Warm Light"
@@ -130,6 +131,29 @@ warm amber otherwise.
 **Security:** the hash and tokens are compiled into the APK. Anyone with the
 APK file and access to your Wi-Fi could switch your lights — but neither
 gives access to your Tapo or Xiaomi account.
+
+## Air conditioner
+
+A **Gree** Wi-Fi AC (the kind the **Gree+** app controls) gets a wide
+frosted card under the light tiles, with a power switch and a dial for the
+setpoint, 16–30 °C — drag around the dial or tap **−** / **+**, and the
+change is sent once you stop. The card shows the mode ("Cooling",
+"Heating", …) and the room temperature when the unit reports one.
+
+Setup needs only the AC's IP — no password or token. On first use the app
+pairs with the unit over your network and the unit hands over its own key.
+
+1. Make sure the AC works in the Gree+ app (that's what puts it on Wi-Fi).
+2. Find its IP: Gree+ → the AC → **⋯** → device info. Give it a fixed IP in
+   your router, as with the bulbs.
+3. Add it to `lights.json`:
+
+   ```json
+   "GREE_AC": "Bedroom=192.168.1.40"
+   ```
+
+Both older (AES-ECB) and newer (AES-GCM) Gree firmware are supported; the
+app works out which on first use. Without `GREE_AC` there's no AC card.
 
 ## Font
 

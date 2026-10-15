@@ -4,8 +4,8 @@ Flutter nightstand clock that turns a spare Galaxy Note 8 into a bedside
 display. It stands on a wireless charger and turns both ways up, because
 the user lays it on its side once it's full to take it off the coil and
 stop it charging all night — so both orientations have to read as a clock.
-Portrait stacks the hours over the minutes; landscape puts `HH:MM` on one
-line. Either way a fading white hairline and the date sit under the time
+Both ways up the time is one `HH:MM` line (portrait used to stack HH over
+MM; the user flattened it to free room for the lights and AC). Either way a fading white hairline and the date sit under the time
 and a battery bar sits at the foot, on a true-black background for AMOLED.
 (A month calendar used to sit on the right in landscape; the user removed
 it as redundant — don't reintroduce it, in either orientation.)
@@ -56,22 +56,22 @@ app builds fine but the lights panel silently disappears.
 
 ## Architecture (lib/main.dart, plus lib/lights.dart)
 
-- Layout: one `LayoutBuilder` branch on `w > h`. Portrait is `HH` on one
-  line with `MM` under it and no colon; landscape is `HH:MM` across. Then,
-  shared: a small seconds/AM-PM row, the hairline, the date. `digitSize`
-  (`min(w * 1.15, h * 0.55)` portrait, the coefficients swapped in
-  landscape) deliberately overshoots and the outer `FittedBox` scales the
+- Layout: one `LayoutBuilder` branch on `w > h`. The time is `HH:MM` on
+  one line either way; then a small seconds/AM-PM row, the hairline, the
+  date. `digitSize` (`min(w * 0.55, h * 1.15)`) deliberately overshoots and the outer `FittedBox` scales the
   column down to fit — `BoxFit.scaleDown` never scales *up*, so an
   undershoot leaves the digits small with no way back. `timeWidth` is the
-  time row's real width (DSEG7 advances `0.676 * digitSize` per digit and
-  `0.196` for the colon at this tracking — measured with a `TextPainter`,
+  time row's real width (`2.902 * digitSize`: DSEG7 advances `0.676` per
+  digit and `0.196` for the colon at this tracking — measured with a `TextPainter`,
   not guessed); everything under the time is capped to `faceWidth`
   (`timeWidth * 0.61`) by `_capWidth`, or a long date sets the width and
   the digits shrink to suit.
 - Face size is set by the *box*, not by `digitSize` — the `FittedBox`
   refills whatever room it's handed, so scaling `digitSize` does nothing
   at all. The dial is the `_faceScale` (0.8) `FractionallySizedBox` around
-  it — the user found a full-bleed face too big both ways up.
+  it — the user found a full-bleed face too big. Standing, the width
+  factor is 1 so the time spans the panel's width (user asked for a
+  bigger clock once the lights sat under it); on its side it's still 0.8.
 - One face only: DSEG7 7-segment digits (`_digitFont` and its
   `_digitScale`/`_digitHeight`/`_digitTracking` constants). The font cycle,
   `_FontSpec`, `_ClockStyle`, and the flip/burst/analog faces were all
@@ -117,16 +117,27 @@ app builds fine but the lights panel silently disappears.
   AES-CBC, signed seq); Mi/Mijia bulbs over miIO (UDP 54321, md5(token)
   key). Mi tries MIoT `set_properties` (siid 2: piid 1 on, piid 2
   brightness) and falls back to legacy `set_power`/`set_bright`.
-- The user's two bulbs: the Tapo is "Warm Light" (dimmable: power + 1% /
-  100% + brightness bar), the Mi is "White Light" (power only). Which
-  lights get dimming is `DIMMABLE_LIGHTS` in lights.json, not the brand.
+- The user's two bulbs: the Tapo is "Warm Light", the Mi is "White
+  Light"; both dimmable. Each light is a *square* tile, two side by side
+  (the user sketched it): name top-left, power circle top-right, a 2×2
+  grid of 1 / 25 / 50 / 100% presets at the bottom. No "On"/"Off"/"50%"
+  text — the lit power button and preset already say it (the user asked);
+  a status line appears only for Offline / Connecting…. The *nearest*
+  preset lights up (`_presets`), since a level set in the bulb's own app
+  rarely lands exactly on one. (A slider came
+  and went — the user replaced it with the presets.) Which lights get
+  dimming is `DIMMABLE_LIGHTS` in lights.json, not the brand.
 - Dashboard styling: the clock keeps its two colours, but the light tiles
-  are free to use colour and icons (the user asked for it). Each tile glows
+  and AC card are free to use colour and icons (the user asked for it).
+  Cards are frosted glass on black — `_glass` / `_glassRaised` /
+  `_glassEdge` (white at 5 / 8 / 10%), modelled on a reference the user
+  sent, minus its photo background. Each tile glows
   in its light's colour when on — `_glowFor` reads it off the name (cool
   white for "white"/"cool", amber otherwise). Header has an ALL OFF button.
-  Panel sits under the clock in portrait (on/off lights 2-up when there
-  are two or more, dimmable lights full width), to its right in landscape.
-  Polls state every 15 s while visible.
+  Panel (header, light squares, then the AC card) sits under the clock in
+  portrait and to its right in landscape, laid out at the portrait width
+  (`26 * unit`) and shrunk by its FittedBox on its side. One page — no
+  swiping. Polls state every 15 s while visible.
 - Config is `lights.json` (gitignored; template in lights.example.json),
   passed as dart-defines. The repo is public — never commit IPs or keys.
   `TAPO_HASH` is sha256(sha1(email)+sha1(password)) from
@@ -139,6 +150,27 @@ app builds fine but the lights panel silently disappears.
   chunks by default) and matches header names case-sensitively — dart:io's
   lowercase `content-length` gets HTTP 400. Headers are set with
   `preserveHeaderCase: true`; keep it. Verified against the real bulb.
+
+## Air conditioner (lib/gree.dart, `AcPanel` in main.dart)
+
+- A Gree unit (Gree+ app) over its LAN protocol: JSON on UDP 7000. Scan for
+  the MAC, bind with the shared key to get the unit's own key, then
+  status/cmd with that. Old firmware is AES-ECB (`a3K8Bx%2r8Y7#xDh`), new
+  is AES-GCM (`{yxAHAY_Lm6pbC/<` — ends in `<`, not `v`; nonce + AAD
+  "qualcomm-test"). Bind tries ECB, then GCM. Every pack carries `mac`.
+  Replies are GCM-decrypted as CTR without checking the tag, like
+  greeclimate. TemSen has a +40 offset. Config is just `GREE_AC=Name=IP`
+  — the key comes from the unit at runtime, nothing secret is stored.
+- Verified against a fake built on greeclimate's own ciphers (both
+  dialects), NOT yet against the user's real unit — its IP wasn't known
+  and the user was away from home when this was written (Oct 2026).
+- UI: a wide frosted card under the light tiles, same page (it was briefly
+  a swipe-away second page; the user wanted everything on one). Compact:
+  dial with the setpoint and room temp on the left; title, power switch,
+  mode caption and − / + on the right. The user chose power + setpoint
+  only — no mode/fan/swing controls. The dial listens to horizontal *and*
+  vertical drags so the dimmer swipe doesn't steal it; setpoint changes
+  are debounced 0.7 s.
 
 ## Fonts (fonts/)
 

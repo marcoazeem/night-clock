@@ -8,6 +8,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'gree.dart';
 import 'lights.dart';
 
 void main() {
@@ -109,6 +110,9 @@ const _faceScale = 0.8;
 /// Holds [child] to [width], shrinking it if it would be wider. The time is
 /// what should set the face width, stacked or across; without this a long
 /// date or a wide platform font would, and the digits would shrink to suit.
+/// The brightness presets on a dimmable light's tile.
+const _presets = [1, 25, 50, 100];
+
 Widget _capWidth(double width, Widget child) {
   return SizedBox(
     width: width,
@@ -170,6 +174,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
 
   final _battery = Battery();
   final _lights = configuredLights();
+  final _acs = configuredAcs();
   final _random = Random();
   Timer? _tick;
   Timer? _driftTimer;
@@ -407,23 +412,20 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
             final driftX = landscape ? 40.0 : 20.0;
             final driftY = landscape ? 20.0 : 40.0;
 
-            // Portrait stacks HH over MM, so two glyphs — not five — set
-            // the width; landscape has room for HH:MM across. Both
-            // overshoot on purpose: the FittedBox below scales the column
-            // down until it fills the panel, and scaleDown never scales up.
-            final digitSize = landscape
-                ? min(w * 0.55, h * 1.15)
-                : min(w * 1.15, h * 0.55);
+            // HH:MM on one line both ways up — standing, that leaves the
+            // panel's height for the lights and AC. Overshoots on purpose:
+            // the FittedBox below scales the column down until it fills its
+            // box, and scaleDown never scales up.
+            final digitSize = min(w * 0.55, h * 1.15);
             // The time's own width. Measured at this tracking: DSEG7
             // advances 0.676 * digitSize per digit, 0.196 for the colon.
-            final timeWidth = digitSize * (landscape ? 2.902 : 1.353);
+            final timeWidth = digitSize * 2.902;
             // Everything under the time is held to this — otherwise a long
             // date sets the width and the digits shrink to suit. Narrower
             // than the time on purpose: a full-width rule reads as an
             // underline rather than a divider.
             final faceWidth = timeWidth * 0.61;
-            // Landscape is short, so the rows under the time close up.
-            final gap = digitSize * (landscape ? 0.07 : 0.11);
+            final gap = digitSize * 0.07;
             final tightGap = gap * 0.64; // Seconds hug the time.
             // The bar sits off the panel's short side — the same size and
             // the same distance from the edge whichever way up the phone is.
@@ -452,32 +454,20 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               letterSpacing: digitSize * 0.009,
             );
             final dateStyle = TextStyle(
-              fontSize: digitSize * 0.075,
+              fontSize: digitSize * 0.14,
               fontWeight: FontWeight.w600,
-              letterSpacing: digitSize * 0.016,
+              letterSpacing: digitSize * 0.025,
             );
 
-            // Hours over minutes on the narrow panel — worth roughly 2.5x
-            // the glyph height one "HH:MM" line would fit. Across the wide
-            // one there's room for the whole time on a single line.
-            final time = landscape
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _segments(hh, digitStyle),
-                      // Lit either way on a real panel, so no layer behind.
-                      Text(':', style: digitStyle),
-                      _segments(mm, digitStyle),
-                    ],
-                  )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _segments(hh, digitStyle),
-                      SizedBox(height: digitSize * 0.05),
-                      _segments(mm, digitStyle),
-                    ],
-                  );
+            final time = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _segments(hh, digitStyle),
+                // Lit either way on a real panel, so no layer behind.
+                Text(':', style: digitStyle),
+                _segments(mm, digitStyle),
+              ],
+            );
 
             // A plain translate: the drift jump costs one frame, where an
             // animated slide would render ~120 frames every minute.
@@ -506,8 +496,10 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                               : Axis.vertical,
                           children: [
                             Expanded(
+                              // Standing, the time spans the full width to
+                              // line up with the panel's edges under it.
                               child: FractionallySizedBox(
-                                widthFactor: _faceScale,
+                                widthFactor: landscape ? _faceScale : 1,
                                 heightFactor: _faceScale,
                                 // scaleDown fits the stack to that box: the time
                                 // is what binds, so this fills it without ever
@@ -606,7 +598,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                                 ),
                               ),
                             ),
-                            if (_lights.isNotEmpty)
+                            if (_lights.isNotEmpty || _acs.isNotEmpty)
                               Padding(
                                 padding: landscape
                                     ? EdgeInsets.only(left: barSpan * 0.04)
@@ -615,12 +607,15 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                                 // there are more lights than room on its side.
                                 child: FittedBox(
                                   fit: BoxFit.scaleDown,
+                                  // Laid out at the portrait width
+                                  // either way up; on its side the
+                                  // FittedBox shrinks it to the height.
                                   child: LightsPanel(
                                     lights: _lights,
+                                    ac: _acs.firstOrNull,
                                     width: landscape
-                                        ? w * 0.36
+                                        ? barSpan * 0.034 * 26
                                         : w - 2 * (driftX + 4),
-                                    columns: landscape ? 1 : 2,
                                     unit: barSpan * 0.034,
                                   ),
                                 ),
@@ -676,13 +671,15 @@ class LightsPanel extends StatefulWidget {
     super.key,
     required this.lights,
     required this.width,
-    required this.columns,
     required this.unit,
+    this.ac,
   });
 
   final List<Light> lights;
   final double width;
-  final int columns;
+
+  /// The air conditioner, shown as a card under the light tiles.
+  final GreeAc? ac;
 
   /// Base text size; the tiles are proportioned off it.
   final double unit;
@@ -783,8 +780,8 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final u = widget.unit;
     final gap = u * 0.8;
-    final tileWidth =
-        (widget.width - gap * (widget.columns - 1)) / widget.columns;
+    // Square tiles, two to a row.
+    final tile = (widget.width - gap) / 2;
     final anyOn = _states.values.any((s) => s.on);
     return SizedBox(
       width: widget.width,
@@ -825,25 +822,20 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
           Wrap(
             spacing: gap,
             runSpacing: gap,
-            children: [
-              // A dimmable light needs the whole row for its controls, as
-              // does an on/off light with no partner to share it.
-              for (final light in widget.lights)
-                _tile(
-                  light,
-                  light.dimmable ||
-                          widget.lights.where((l) => !l.dimmable).length < 2
-                      ? widget.width
-                      : tileWidth,
-                ),
-            ],
+            children: [for (final light in widget.lights) _tile(light, tile)],
           ),
+          if (widget.ac != null) ...[
+            SizedBox(height: gap),
+            AcPanel(ac: widget.ac!, width: widget.width, unit: u),
+          ],
         ],
       ),
     );
   }
 
-  Widget _tile(Light light, double width) {
+  /// A square tile: name and state top-left, power top-right, and for a
+  /// dimmable light a 2×2 grid of brightness presets along the bottom.
+  Widget _tile(Light light, double size) {
     final u = widget.unit;
     final glow = _glowFor(light);
     final state = _states[light];
@@ -851,26 +843,69 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
     final level = state?.brightness;
     final offline = _offline.contains(light);
     final busy = _busy.contains(light);
+    // On/off and the level already show on the lit buttons; only say
+    // something when the tile can't show either.
     final status = offline
         ? 'Offline'
         : state == null
         ? 'Connecting…'
-        : !on
-        ? 'Off'
-        : light.dimmable && level != null
-        ? 'On · $level%'
-        : 'On';
+        : null;
     final accent = offline
         ? _red
         : (on ? glow : _white.withValues(alpha: 0.45));
 
+    Widget preset(int pct) {
+      // The level set elsewhere (the bulb's own app, a wall switch) rarely
+      // lands on a preset, so light up whichever is nearest.
+      final active =
+          on &&
+          level != null &&
+          _presets.reduce(
+                (a, b) => (a - level).abs() <= (b - level).abs() ? a : b,
+              ) ==
+              pct;
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: busy
+              ? null
+              : () => _run(
+                  light,
+                  () => light.setBrightness(pct),
+                  LightState(true, pct),
+                ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            height: u * 2.5,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: active ? glow : _glassRaised,
+              border: Border.all(color: active ? glow : _glassEdge),
+              borderRadius: BorderRadius.circular(u * 1.25),
+            ),
+            child: Text(
+              '$pct%',
+              style: TextStyle(
+                color: active
+                    ? Colors.black
+                    : _white.withValues(alpha: busy ? 0.3 : 0.8),
+                fontSize: u * 0.95,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      width: width,
-      padding: EdgeInsets.all(u * 0.9),
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(u * 1.1),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(u * 1.2),
-        color: on ? null : const Color(0xFF0E0E10),
+        borderRadius: BorderRadius.circular(u * 1.8),
+        color: on ? null : _glass,
         gradient: on
             ? LinearGradient(
                 begin: Alignment.topLeft,
@@ -886,7 +921,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
               ? glow.withValues(alpha: 0.55)
               : offline
               ? _red.withValues(alpha: 0.35)
-              : const Color(0xFF26262A),
+              : _glassEdge,
         ),
         boxShadow: on
             ? [
@@ -898,58 +933,40 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
             : null,
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // The bulb, lit in its own colour.
-              Container(
-                width: u * 3,
-                height: u * 3,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: on
-                      ? glow.withValues(alpha: 0.22)
-                      : const Color(0xFF1C1C20),
-                  boxShadow: on
-                      ? [
-                          BoxShadow(
-                            color: glow.withValues(alpha: 0.55),
-                            blurRadius: u * 1.4,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Icon(
-                  offline
-                      ? Icons.wifi_off_rounded
-                      : on
-                      ? Icons.lightbulb_rounded
-                      : Icons.lightbulb_outline_rounded,
-                  size: u * 1.7,
-                  color: accent,
-                ),
-              ),
-              SizedBox(width: u * 0.9),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Icon(
+                      offline
+                          ? Icons.wifi_off_rounded
+                          : on
+                          ? Icons.lightbulb_rounded
+                          : Icons.lightbulb_outline_rounded,
+                      size: u * 1.5,
+                      color: accent,
+                      shadows: on ? [Shadow(color: glow, blurRadius: u)] : null,
+                    ),
+                    SizedBox(height: u * 0.4),
                     Text(
                       light.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: _white.withValues(alpha: on ? 0.95 : 0.7),
-                        fontSize: u * 1.1,
+                        fontSize: u * 1.05,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    SizedBox(height: u * 0.15),
-                    Text(
-                      status,
-                      style: TextStyle(color: accent, fontSize: u * 0.85),
-                    ),
+                    if (status != null)
+                      Text(
+                        status,
+                        style: TextStyle(color: accent, fontSize: u * 0.8),
+                      ),
                   ],
                 ),
               ),
@@ -969,7 +986,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                   height: u * 3.2,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: on ? glow : const Color(0xFF1C1C20),
+                    color: on ? glow : _glassRaised,
                     border: Border.all(
                       color: on ? glow : _white.withValues(alpha: 0.18),
                     ),
@@ -993,64 +1010,21 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
               ),
             ],
           ),
+          const Spacer(),
           if (light.dimmable) ...[
-            SizedBox(height: u * 1),
-            // Brightness, as a bar in the light's colour.
-            ClipRRect(
-              borderRadius: BorderRadius.circular(u),
-              child: SizedBox(
-                height: u * 0.35,
-                child: Stack(
-                  children: [
-                    Container(color: _white.withValues(alpha: 0.08)),
-                    FractionallySizedBox(
-                      widthFactor: on && level != null
-                          ? level.clamp(1, 100) / 100
-                          : 0,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [glow.withValues(alpha: 0.5), glow],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SizedBox(height: u * 0.9),
             Row(
               children: [
-                Expanded(
-                  child: _chip(
-                    Icons.brightness_low_rounded,
-                    '1%',
-                    active: on && level == 1,
-                    color: glow,
-                    enabled: !busy,
-                    onTap: () => _run(
-                      light,
-                      () => light.setBrightness(1),
-                      const LightState(true, 1),
-                    ),
-                  ),
-                ),
+                preset(1),
                 SizedBox(width: u * 0.6),
-                Expanded(
-                  child: _chip(
-                    Icons.brightness_high_rounded,
-                    '100%',
-                    active: on && level == 100,
-                    color: glow,
-                    enabled: !busy,
-                    onTap: () => _run(
-                      light,
-                      () => light.setBrightness(100),
-                      const LightState(true, 100),
-                    ),
-                  ),
-                ),
+                preset(25),
+              ],
+            ),
+            SizedBox(height: u * 0.6),
+            Row(
+              children: [
+                preset(50),
+                SizedBox(width: u * 0.6),
+                preset(100),
               ],
             ),
           ],
@@ -1081,7 +1055,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
         height: u * 2.6,
         padding: EdgeInsets.symmetric(horizontal: u * 0.9),
         decoration: BoxDecoration(
-          color: active ? color : const Color(0xFF16161A),
+          color: active ? color : _glassRaised,
           border: Border.all(
             color: active ? color : _white.withValues(alpha: 0.12),
           ),
@@ -1109,6 +1083,12 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
   }
 }
 
+// The frosted-card surfaces — white over black at low opacity, the
+// reference's glass without the photo behind it.
+final _glass = _white.withValues(alpha: 0.05);
+final _glassRaised = _white.withValues(alpha: 0.08);
+final _glassEdge = _white.withValues(alpha: 0.10);
+
 /// A light's glow colour, read off its name: cool white for a "white" or
 /// "cool" light, warm amber for anything else. Only the lights get colour
 /// like this — the clock keeps its white and red.
@@ -1117,4 +1097,404 @@ Color _glowFor(Light light) {
   return name.contains('white') || name.contains('cool')
       ? const Color(0xFFD6E6FF)
       : const Color(0xFFFFB04A);
+}
+
+/// The air conditioner as one wide frosted card under the lights — a dial
+/// for the setpoint (drag it, or tap − / +) with the room temperature in
+/// it, and a power switch. Polls every 15 s while the app is on screen.
+class AcPanel extends StatefulWidget {
+  const AcPanel({
+    super.key,
+    required this.ac,
+    required this.width,
+    required this.unit,
+  });
+
+  final GreeAc ac;
+  final double width;
+  final double unit;
+
+  @override
+  State<AcPanel> createState() => _AcPanelState();
+}
+
+class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
+  // The reference's olive-yellow, for the arc, ticks and switch.
+  static const _accent = Color(0xFFE3DC5B);
+
+  AcState? _state;
+  bool _offline = false;
+  bool _busy = false;
+
+  /// A setpoint being dialled in, sent once the user stops moving it.
+  int? _pending;
+  Timer? _poll;
+  Timer? _send;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    _refresh();
+    _poll = Timer.periodic(const Duration(seconds: 15), (_) => _refresh());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startPolling();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _poll?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _poll?.cancel();
+    _send?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final state = await widget.ac.state();
+      if (mounted) {
+        setState(() {
+          _state = state;
+          _offline = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _offline = true);
+    }
+  }
+
+  Future<void> _togglePower() async {
+    final on = !(_state?.on ?? false);
+    setState(() => _busy = true);
+    try {
+      await widget.ac.setPower(on);
+      _state = _state?.copyWith(on: on);
+      _offline = false;
+    } catch (_) {
+      _offline = true;
+    }
+    if (!mounted) return;
+    setState(() => _busy = false);
+    _refresh();
+  }
+
+  /// Moves the dial to [temp] now and tells the unit 0.7 s after the last
+  /// change, so a drag or a run of taps is one command.
+  void _dial(int temp) {
+    final t = temp.clamp(acMinTemp, acMaxTemp);
+    if (t == (_pending ?? _state?.setTemp)) return;
+    setState(() => _pending = t);
+    _send?.cancel();
+    _send = Timer(const Duration(milliseconds: 700), () async {
+      try {
+        await widget.ac.setTemp(t);
+        _state = _state?.copyWith(setTemp: t);
+        _offline = false;
+      } catch (_) {
+        _offline = true;
+      }
+      if (!mounted) return;
+      setState(() => _pending = null);
+      _refresh();
+    });
+  }
+
+  /// The setpoint under a touch at [p] on a dial [size] wide: the arc runs
+  /// 270° clockwise from bottom-left, and touches in the gap snap to the
+  /// nearer end.
+  int _tempAt(Offset p, double size) {
+    final c = Offset(size / 2, size / 2);
+    final deg = atan2(p.dy - c.dy, p.dx - c.dx) * 180 / pi;
+    var along = (deg - 135 + 360) % 360;
+    if (along > 270) along = along > 315 ? 0 : 270;
+    return acMinTemp + (along / 270 * (acMaxTemp - acMinTemp)).round();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final u = widget.unit;
+    final state = _state;
+    final on = state?.on == true;
+    final temp = _pending ?? state?.setTemp ?? 24;
+    final dialSize = u * 10;
+    final caption = _offline
+        ? 'Offline'
+        : state == null
+        ? 'Connecting…'
+        : !on
+        ? 'Off'
+        : const [
+                'Auto',
+                'Cooling',
+                'Drying',
+                'Fan',
+                'Heating',
+              ].elementAtOrNull(state.mode) ??
+              'On';
+    final room = state?.roomTemp;
+
+    Widget roundButton(IconData icon, VoidCallback onTap) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: u * 3,
+        height: u * 3,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _glassRaised,
+          border: Border.all(color: _glassEdge),
+        ),
+        child: Icon(icon, size: u * 1.4, color: _white.withValues(alpha: 0.85)),
+      ),
+    );
+
+    return Container(
+      width: widget.width,
+      padding: EdgeInsets.all(u * 1.2),
+      decoration: BoxDecoration(
+        color: _glass,
+        borderRadius: BorderRadius.circular(u * 1.8),
+        border: Border.all(color: _glassEdge),
+      ),
+      child: Row(
+        children: [
+          // The dial. Drag along it (either axis — so the dimmer swipe
+          // doesn't steal the touch) or tap a point on it.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (d) => _dial(_tempAt(d.localPosition, dialSize)),
+            onHorizontalDragUpdate: (d) =>
+                _dial(_tempAt(d.localPosition, dialSize)),
+            onVerticalDragUpdate: (d) =>
+                _dial(_tempAt(d.localPosition, dialSize)),
+            child: SizedBox(
+              width: dialSize,
+              height: dialSize * 0.86,
+              child: CustomPaint(
+                painter: _DialPainter(
+                  value: (temp - acMinTemp) / (acMaxTemp - acMinTemp),
+                  accent: on ? _accent : _white.withValues(alpha: 0.3),
+                  unit: u * 0.55,
+                ),
+                // The box is cut off below the arc, so its middle sits above
+                // the circle's; pad the top to centre the readout in the ring.
+                child: Padding(
+                  padding: EdgeInsets.only(top: dialSize * 0.14),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '$temp°',
+                        style: TextStyle(
+                          color: _white.withValues(alpha: on ? 1 : 0.5),
+                          fontSize: u * 2.4,
+                          fontWeight: FontWeight.w300,
+                          height: 1.1,
+                        ),
+                      ),
+                      if (room != null)
+                        Text(
+                          'Room $room°',
+                          style: TextStyle(
+                            color: _white.withValues(alpha: 0.55),
+                            fontSize: u * 0.75,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: u * 1.2),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Air Conditioner',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: _white,
+                              fontSize: u * 1.1,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            widget.ac.name,
+                            style: TextStyle(
+                              color: _white.withValues(alpha: 0.5),
+                              fontSize: u * 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // The power switch: a pill with a knob that lights up on.
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _busy || state == null ? null : _togglePower,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        width: u * 4,
+                        height: u * 2.3,
+                        padding: EdgeInsets.all(u * 0.3),
+                        alignment: on
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        decoration: BoxDecoration(
+                          color: _glassRaised,
+                          borderRadius: BorderRadius.circular(u * 1.2),
+                          border: Border.all(color: _glassEdge),
+                        ),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          width: u * 1.7,
+                          height: u * 1.7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: on
+                                ? _accent
+                                : _white.withValues(alpha: 0.35),
+                            boxShadow: on
+                                ? [
+                                    BoxShadow(
+                                      color: _accent.withValues(alpha: 0.6),
+                                      blurRadius: u,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: _busy
+                              ? Padding(
+                                  padding: EdgeInsets.all(u * 0.4),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: u * 0.15,
+                                    color: Colors.black54,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: u * 0.5),
+                Text(
+                  caption,
+                  style: TextStyle(
+                    color: _offline ? _red : _white.withValues(alpha: 0.7),
+                    fontSize: u * 0.9,
+                  ),
+                ),
+                SizedBox(height: u * 0.7),
+                Row(
+                  children: [
+                    roundButton(Icons.remove_rounded, () => _dial(temp - 1)),
+                    SizedBox(width: u * 0.8),
+                    roundButton(Icons.add_rounded, () => _dial(temp + 1)),
+                    const Spacer(),
+                    Text(
+                      '$acMinTemp–$acMaxTemp°',
+                      style: TextStyle(
+                        color: _white.withValues(alpha: 0.4),
+                        fontSize: u * 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The 270° setpoint arc: a faint track, the filled part in the accent,
+/// a ring of ticks inside it, and a glowing knob at the setpoint.
+class _DialPainter extends CustomPainter {
+  _DialPainter({required this.value, required this.accent, required this.unit});
+
+  final double value;
+  final Color accent;
+  final double unit;
+
+  static const _start = 3 * pi / 4;
+  static const _sweep = 3 * pi / 2;
+  static const _ticks = 36;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.width / 2);
+    final r = size.width / 2 - unit * 0.8;
+    final rect = Rect.fromCircle(center: c, radius: r);
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = unit * 0.3;
+    canvas.drawArc(
+      rect,
+      _start,
+      _sweep,
+      false,
+      stroke..color = _white.withValues(alpha: 0.10),
+    );
+    canvas.drawArc(rect, _start, _sweep * value, false, stroke..color = accent);
+
+    final tick = Paint()
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = unit * 0.16;
+    for (var i = 0; i <= _ticks; i++) {
+      final f = i / _ticks;
+      final a = _start + _sweep * f;
+      final dir = Offset(cos(a), sin(a));
+      tick.color = f <= value + 1e-6
+          ? accent.withValues(alpha: 0.85)
+          : _white.withValues(alpha: 0.15);
+      canvas.drawLine(
+        c + dir * (r - unit * 1.2),
+        c + dir * (r - unit * (i % 3 == 0 ? 2.1 : 1.7)),
+        tick,
+      );
+    }
+
+    final knob =
+        c +
+        Offset(cos(_start + _sweep * value), sin(_start + _sweep * value)) * r;
+    canvas.drawCircle(
+      knob,
+      unit * 0.9,
+      Paint()
+        ..color = accent.withValues(alpha: 0.35)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, unit * 0.6),
+    );
+    canvas.drawCircle(knob, unit * 0.6, Paint()..color = accent);
+  }
+
+  @override
+  bool shouldRepaint(_DialPainter old) =>
+      old.value != value || old.accent != accent || old.unit != unit;
 }
