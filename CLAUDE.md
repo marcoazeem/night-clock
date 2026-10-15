@@ -5,8 +5,10 @@ display. It stands on a wireless charger and turns both ways up, because
 the user lays it on its side once it's full to take it off the coil and
 stop it charging all night — so both orientations have to read as a clock.
 Both ways up the time is one `HH:MM` line (portrait used to stack HH over
-MM; the user flattened it to free room for the lights and AC). Either way a fading white hairline and the date sit under the time
-and a battery bar sits at the foot, on a true-black background for AMOLED.
+MM; the user flattened it to free room for the lights and AC). Either way a fading white hairline and the date sit under the time, on a
+true-black background for AMOLED. (There's no battery bar any more — the
+phone is always on the charger, so the user had it removed along with
+battery_plus. Don't bring it back.)
 (A month calendar used to sit on the right in landscape; the user removed
 it as redundant — don't reintroduce it, in either orientation.)
 
@@ -29,11 +31,6 @@ spare as before — one font, two colours; don't add faces or themes back.
   phone. Verify visuals with golden tests instead (see below). That
   includes `keyevent WAKEUP`: if `dumpsys power` says `mWakefulness=Asleep`
   a screencap is all black, and the fix is to ask the user to wake it.
-- `adb shell dumpsys battery set level N` does NOT move the in-app gauge:
-  battery_plus reads `BATTERY_PROPERTY_CAPACITY` from the HAL, which the
-  override bypasses. Verify gauge colours with a golden test instead, and
-  note the level is only re-polled once a minute (or on a charge-state
-  change), so it lags a forced change either way.
 
 ## Toolchain & commands
 
@@ -87,14 +84,6 @@ app builds fine but the lights panel silently disappears.
 - Gestures: vertical swipe = dim, long-press = 12/24h, double-tap =
   seconds. Settings persist via SharedPreferences. There is no tap or
   horizontal-swipe gesture any more.
-- Battery bar: a plain capsule, no outline and no percentage — length is
-  the charge, colour comes from `batteryColor()` (green 100 → amber 50 →
-  red 0, lerped), with `Icons.bolt` shown only while charging. The user
-  explicitly rejected a battery-shaped icon and the % readout. It sizes and
-  sits off `barSpan` (the panel's *short* side) so it's the same bar in
-  both orientations — never off `digitSize`, which is an overshoot. The
-  face's bottom padding reserves `barZone` (inset + bolt height + 12) so a
-  height-bound landscape face can't grow down into it.
 - Two-stage dimmer: `_dim` above `_panelFloor` (0.4) drives real
   window-level brightness (screen_brightness plugin, no permissions,
   system setting untouched, reset on pause/dispose, re-asserted on resume
@@ -134,10 +123,12 @@ app builds fine but the lights panel silently disappears.
   sent, minus its photo background. Each tile glows
   in its light's colour when on — `_glowFor` reads it off the name (cool
   white for "white"/"cool", amber otherwise). Header has an ALL OFF button.
-  Panel (header, light squares, then the AC card) sits under the clock in
+  Panel (header, light squares, then the AC tiles) sits under the clock in
   portrait and to its right in landscape, laid out at the portrait width
-  (`26 * unit`) and shrunk by its FittedBox on its side. One page — no
-  swiping. Polls state every 15 s while visible.
+  (`26 * unit`) either way. One page, no swiping — but the panel scrolls
+  vertically once it outgrows its room (the user said scrolling is fine
+  when they added a second AC). Standing, its max height stops at what
+  keeps the clock full width (`0.58 * width` reserved for the face). Polls state every 15 s while visible.
 - Config is `lights.json` (gitignored; template in lights.example.json),
   passed as dart-defines. The repo is public — never commit IPs or keys.
   `TAPO_HASH` is sha256(sha1(email)+sha1(password)) from
@@ -163,14 +154,17 @@ app builds fine but the lights panel silently disappears.
   — the key comes from the unit at runtime, nothing secret is stored.
 - Verified against the user's real unit (Oct 2026): old firmware
   (V3.4.M, ECB), status and cmd both work; the first call (scan + bind)
-  takes ~4 s. The house has three Gree units; the bedroom one is the
-  dashboard's. Gree+ shows only the MAC, not the IP — find IPs by
+  takes ~4 s. The house has three Gree units; the dashboard shows two,
+  "Bedroom" then "AC 2", one card each (`GREE_AC` is comma-separated,
+  `LightsPanel.acs`). Gree+ shows only the MAC, not the IP — find IPs by
   broadcasting `{"t":"scan"}` to UDP 7000 on the subnet and decrypting the
   replies with the generic ECB key.
-- UI: a wide frosted card under the light tiles, same page (it was briefly
-  a swipe-away second page; the user wanted everything on one). Compact:
-  dial with the setpoint and room temp on the left; title, power switch,
-  mode caption and − / + on the right. The user chose power + setpoint
+- UI: one tile per AC, two side by side under the light squares, same
+  width as a light tile but 1.3× as tall so the dial has room (it was a
+  wide card per AC, then the user wanted both visible at once). Name and
+  mode top-left, the lights' power circle top-right (in the AC's yellow
+  accent), dial with the setpoint in the middle, − / room temp / + along
+  the foot. The user chose power + setpoint
   only — no mode/fan/swing controls. The dial listens to horizontal *and*
   vertical drags so the dimmer swipe doesn't steal it; setpoint changes
   are debounced 0.7 s.
@@ -189,12 +183,7 @@ Write a throwaway golden test, run
 `flutter test --update-goldens test/<name>.dart`, Read the PNG, then
 delete the test and `test/goldens/`. Notes: the test font (Ahem) renders
 text as solid boxes (geometry is still checkable; load real TTFs via
-FontLoader when glyphs matter); battery_plus throws MissingPluginException
-in tests — filter it via `FlutterError.onError` or keep it out of the
-committed test. To make the battery bar appear in a golden, mock
-`getBatteryLevel` on the `dev.fluttercommunity.plus/battery` method channel
-(the charging *stream* is an EventChannel and not worth faking — `barZone`
-already reserves the bolt's height whether or not it's charging).
+FontLoader when glyphs matter).
 
 Two traps that cost real time:
 

@@ -29,12 +29,6 @@ across launches. The whole display wanders within a ±20 × ±40 px region
 jumping to a new spot every minute, so no pixel holds a static image —
 AMOLED burn-in protection.
 
-At the bottom sits a plain capsule bar — no battery outline, no percentage.
-Its length is the charge and its colour is the warning, lerped green (100%)
-through amber (50%) to red (0%). A bolt appears to its left while charging,
-so it doubles as the answer to "is it still charging?" after a rotation. It
-sizes off the panel's short side, so it's the same bar either way up.
-
 Every digit is drawn over its own unlit segments — a faint all-8s layer at
 11% opacity — so the display reads like a real 7-segment panel rather than
 floating glyphs.
@@ -134,10 +128,10 @@ gives access to your Tapo or Xiaomi account.
 
 ## Air conditioner
 
-A **Gree** Wi-Fi AC (the kind the **Gree+** app controls) gets a wide
-frosted card under the light tiles, with a power switch and a dial for the
+A **Gree** Wi-Fi AC (the kind the **Gree+** app controls) gets a frosted
+tile under the lights, two to a row, with a power button and a dial for the
 setpoint, 16–30 °C — drag around the dial or tap **−** / **+**, and the
-change is sent once you stop. The card shows the mode ("Cooling",
+change is sent once you stop. The tile shows the mode ("Cooling",
 "Heating", …) and the room temperature when the unit reports one.
 
 Setup needs only the AC's IP — no password or token. On first use the app
@@ -153,8 +147,10 @@ pairs with the unit over your network and the unit hands over its own key.
    "GREE_AC": "Bedroom=192.168.1.40"
    ```
 
+   Several ACs are comma-separated: `"Bedroom=…, Office=…"`.
+
 Both older (AES-ECB) and newer (AES-GCM) Gree firmware are supported; the
-app works out which on first use. Without `GREE_AC` there's no AC card.
+app works out which on first use. Without `GREE_AC` there are no AC tiles.
 
 ## Font
 
