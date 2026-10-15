@@ -161,9 +161,12 @@ app builds fine but the lights panel silently disappears.
   Replies are GCM-decrypted as CTR without checking the tag, like
   greeclimate. TemSen has a +40 offset. Config is just `GREE_AC=Name=IP`
   — the key comes from the unit at runtime, nothing secret is stored.
-- Verified against a fake built on greeclimate's own ciphers (both
-  dialects), NOT yet against the user's real unit — its IP wasn't known
-  and the user was away from home when this was written (Oct 2026).
+- Verified against the user's real unit (Oct 2026): old firmware
+  (V3.4.M, ECB), status and cmd both work; the first call (scan + bind)
+  takes ~4 s. The house has three Gree units; the bedroom one is the
+  dashboard's. Gree+ shows only the MAC, not the IP — find IPs by
+  broadcasting `{"t":"scan"}` to UDP 7000 on the subnet and decrypting the
+  replies with the generic ECB key.
 - UI: a wide frosted card under the light tiles, same page (it was briefly
   a swipe-away second page; the user wanted everything on one). Compact:
   dial with the setpoint and room temp on the left; title, power switch,

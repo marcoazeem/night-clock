@@ -144,8 +144,9 @@ Setup needs only the AC's IP — no password or token. On first use the app
 pairs with the unit over your network and the unit hands over its own key.
 
 1. Make sure the AC works in the Gree+ app (that's what puts it on Wi-Fi).
-2. Find its IP: Gree+ → the AC → **⋯** → device info. Give it a fixed IP in
-   your router, as with the bulbs.
+2. Find its IP. Gree+ only shows the MAC (the AC → **⋯** → device info),
+   so match that MAC against your router's list of connected devices. Give
+   it a fixed IP in your router, as with the bulbs.
 3. Add it to `lights.json`:
 
    ```json
