@@ -754,8 +754,8 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
     );
   }
 
-  /// A square tile: name and state top-left, power top-right, and for a
-  /// dimmable light a 2×2 grid of brightness presets along the bottom.
+  /// A square tile: one big power button across the top and, for a
+  /// dimmable light, a 2×2 grid of brightness presets under it.
   Widget _tile(Light light, double size) {
     final u = widget.unit;
     final glow = _glowFor(light);
@@ -855,34 +855,54 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
       ),
       child: Column(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
+          // Power fills the top: no name, the tile's colour says which
+          // light it is (off, the icon keeps a hint of that colour).
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: busy
+                  ? null
+                  : () => _run(
+                      light,
+                      () => light.setPower(!on),
+                      LightState(!on, level),
+                    ),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: on ? glow : _glassRaised,
+                  borderRadius: BorderRadius.circular(u * 1.25),
+                  border: Border.all(
+                    color: on
+                        ? glow
+                        : offline
+                        ? _red.withValues(alpha: 0.35)
+                        : _glassEdge,
+                  ),
+                ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      offline
-                          ? Icons.wifi_off_rounded
-                          : on
-                          ? Icons.lightbulb_rounded
-                          : Icons.lightbulb_outline_rounded,
-                      size: u * 1.5,
-                      color: accent,
-                      shadows: on ? [Shadow(color: glow, blurRadius: u)] : null,
-                    ),
-                    SizedBox(height: u * 0.4),
-                    Text(
-                      light.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: _white.withValues(alpha: on ? 0.95 : 0.7),
-                        fontSize: u * 1.05,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    busy
+                        ? SizedBox.square(
+                            dimension: u * 2.4,
+                            child: CircularProgressIndicator(
+                              strokeWidth: u * 0.2,
+                              color: on ? Colors.black : _white,
+                            ),
+                          )
+                        : Icon(
+                            offline
+                                ? Icons.wifi_off_rounded
+                                : Icons.power_settings_new_rounded,
+                            size: u * 3,
+                            color: on
+                                ? Colors.black
+                                : offline
+                                ? _red
+                                : glow.withValues(alpha: 0.6),
+                          ),
                     if (status != null)
                       Text(
                         status,
@@ -891,47 +911,9 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                   ],
                 ),
               ),
-              // Power: on when off, off when on.
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: busy
-                    ? null
-                    : () => _run(
-                        light,
-                        () => light.setPower(!on),
-                        LightState(!on, level),
-                      ),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: u * 3.2,
-                  height: u * 3.2,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: on ? glow : _glassRaised,
-                    border: Border.all(
-                      color: on ? glow : _white.withValues(alpha: 0.18),
-                    ),
-                  ),
-                  child: busy
-                      ? Padding(
-                          padding: EdgeInsets.all(u * 0.9),
-                          child: CircularProgressIndicator(
-                            strokeWidth: u * 0.15,
-                            color: on ? Colors.black : _white,
-                          ),
-                        )
-                      : Icon(
-                          Icons.power_settings_new_rounded,
-                          size: u * 1.6,
-                          color: on
-                              ? Colors.black
-                              : _white.withValues(alpha: 0.7),
-                        ),
-                ),
-              ),
-            ],
+            ),
           ),
-          const Spacer(),
+          if (light.dimmable) SizedBox(height: u * 0.6),
           if (light.dimmable) ...[
             Row(
               children: [

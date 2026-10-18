@@ -108,10 +108,13 @@ app builds fine but the lights panel silently disappears.
   brightness) and falls back to legacy `set_power`/`set_bright`.
 - The user's two bulbs: the Tapo is "Warm Light", the Mi is "White
   Light"; both dimmable. Each light is a *square* tile, two side by side
-  (the user sketched it): name top-left, power circle top-right, a 2×2
-  grid of 1 / 25 / 50 / 100% presets at the bottom. No "On"/"Off"/"50%"
-  text — the lit power button and preset already say it (the user asked);
-  a status line appears only for Offline / Connecting…. The *nearest*
+  (the user sketched it): one big power button filling the top, a 2×2
+  grid of 1 / 25 / 50 / 100% presets under it. No name, no bulb icon and
+  no "On"/"Off"/"50%" text — the tile's colour says which light it is and
+  the lit button and preset say the rest (the user asked for each
+  removal). Off, the power icon keeps a 60% tint of the light's colour so
+  the two stay distinguishable. A status line appears inside the button
+  only for Offline / Connecting…. The *nearest*
   preset lights up (`_presets`), since a level set in the bulb's own app
   rarely lands exactly on one. (A slider came
   and went — the user replaced it with the presets.) Which lights get
