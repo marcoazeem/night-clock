@@ -3,5 +3,11 @@
   "TAPO_LIGHTS": "Bed=192.168.1.20, Desk=192.168.1.21",
   "MI_LIGHTS": "Lamp=192.168.1.30/0123456789abcdef0123456789abcdef",
   "DIMMABLE_LIGHTS": "Bed",
-  "GREE_AC": "Bedroom=192.168.1.40"
+  "GREE_AC": "Bedroom=192.168.1.40",
+  "HISENSE_TV": "TV=192.168.1.50/aabbccddeeff",
+  "WEATHER_AT": "51.5072,-0.1276",
+  "BEYOND_TV": "Beyond TV=192.168.1.60",
+  "ROOMS": "Bedroom (Master)=Bed,Desk,Bedroom,TV; Living Room=Beyond TV; Kitchen=",
+  "START_ROOM": "Bedroom",
+  "ROOM_PINS": "Kitchen=1234"
 }

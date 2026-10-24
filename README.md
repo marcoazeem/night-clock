@@ -1,11 +1,11 @@
 # Night Clock
 
-A bedside nightstand clock and smart-light dashboard (Flutter) for a
-repurposed Galaxy Note 8, on a true-black AMOLED-friendly background. The
-screen stays on via `wakelock_plus`. Under the clock sits a panel for your
-TP-Link Tapo and Xiaomi Mi/Mijia bulbs and a Gree air conditioner, all on
-one page and controlled straight over your home Wi-Fi. See
-[Smart lights](#smart-lights) and [Air conditioner](#air-conditioner).
+A bedside clock and smart-home dashboard (Flutter) for a repurposed Galaxy
+Note 8. The screen stays on via `wakelock_plus`. Under the clock sits a
+panel for your TP-Link Tapo and Xiaomi Mi/Mijia bulbs, Gree air
+conditioners and a Hisense TV, all on one page and controlled straight over
+your home Wi-Fi. See [Smart lights](#smart-lights),
+[Air conditioner](#air-conditioner) and [TV](#tv).
 
 It turns whichever way the phone is standing. Either way the time is one
 `HH:MM` line with a fading hairline and the date beneath it: upright it
@@ -13,25 +13,32 @@ spans the width above the lights; on its side it sits to their left. That matter
 phone on its side once it's full and it slips off the coil and stops
 charging, without giving up the clock.
 
-The clock's palette is white and red only: the time is white, the date is
-red, and every digit "1" renders red. The light tiles are the one place
-with more colour — each glows in its bulb's own shade when it's on.
+## Look
+
+- **Clock** in [Nabla](https://nabla.typearture.com/), a colour font:
+  yellow-orange (palette 0) by day, slate (palette 3) at night. The date is
+  red, with the current weather beside it — sunny / clear / rain and the
+  temperature, from [Open-Meteo](https://open-meteo.com/) (set
+  `WEATHER_AT` to your `lat,lon` in `lights.json`).
+- **Sky** behind everything changes with the time and weather: a sunrise
+  and soft sun in the morning (06–11), deep blue by day, a sunset glow
+  (17–19), stars once it's dark (19–06), and rain falling whenever it
+  rains.
+- **Frosted-glass cards**, each in its device's own colour — amber and
+  icy white for the bulbs, violet for the TV, and the AC's colour follows
+  its mode (cyan cooling, orange heating).
+- **Night mode** (23:00–06:00) shifts the dashboard's colours to deep red.
 
 ## Gestures
 
-- **Swipe up / down** — brighter / dimmer (two-stage, see Battery)
-- **Long-press** — toggle 12/24-hour
-- **Double-tap** — show/hide seconds
+- **Swipe up / down** (over the clock) — brighter / dimmer (two-stage, see
+  Battery)
 
-Seconds and AM/PM share a small row under the time. Settings persist
+The time is always 24-hour, without seconds. The dimmer setting persists
 across launches. The whole display wanders within a ±20 × ±40 px region
 (±40 × ±20 on its side — always wider along the panel's long axis),
 jumping to a new spot every minute, so no pixel holds a static image —
 AMOLED burn-in protection.
-
-Every digit is drawn over its own unlit segments — a faint all-8s layer at
-11% opacity — so the display reads like a real 7-segment panel rather than
-floating glyphs.
 
 ## Smart lights
 
@@ -152,11 +159,32 @@ pairs with the unit over your network and the unit hands over its own key.
 Both older (AES-ECB) and newer (AES-GCM) Gree firmware are supported; the
 app works out which on first use. Without `GREE_AC` there are no AC tiles.
 
+## TV
+
+A **Hisense VIDAA** TV gets a wide card under the ACs: a power button and
+volume − / +. Off and volume go over the TV's own remote protocol (the one
+the RemoteNOW app uses); on is Wake-on-LAN, since the TV stops listening in
+standby.
+
+1. On the TV, turn on **Wake on LAN** / **Wake on Wireless Network**.
+2. Give it a fixed IP in your router and note its MAC.
+3. Add it to `lights.json`:
+
+   ```json
+   "HISENSE_TV": "TV=192.168.1.50/aabbccddeeff"
+   ```
+
+4. Pair once: the first time the app talks to the TV it shows a 4-digit
+   code on screen, which goes to
+   `/remoteapp/tv/ui_service/nightclock/actions/authenticationcode` as
+   `{"authNum":"1234"}` (any MQTT client will do — see lib/tv.dart).
+
 ## Font
 
-One face: **DSEG7 Classic**, the 7-segment digital clock font (SIL OFL, by
-Keshikan), in `fonts/` with its license. It covers digits and the colon
-only, so the date and AM/PM deliberately fall back to the platform font.
+**Nabla** (by Arthur Reinders Folmer and Just van Rossum) for the clock and
+**Inter** (by Rasmus Andersson) for everything else, both SIL OFL, in
+`fonts/` with their licenses. `Nabla-Night.ttf` is Nabla with its palette 3
+made the default, since Flutter can't choose a colour font's palette.
 
 ## Battery
 

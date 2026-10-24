@@ -46,3 +46,14 @@ app.*.map.json
 
 # Light addresses and keys — passed with --dart-define-from-file, never committed
 /lights.json
+
+# Background videos are the user's own clips (likely stock footage) — kept
+# out of the public repo. The app falls back to the drawn sky without them.
+/*.mp4
+/*.mov
+/assets/video/*.mp4
+/*.mov
+
+# iPad build output (rendered glyphs, generated Config.h with the light keys, the app)
+# The iPad port is its own repo (marcoazeem/night-clock-ipad), cloned here.
+/ipad/
