@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
@@ -83,17 +84,31 @@ bool _isNight(DateTime t) =>
     (!const bool.fromEnvironment('FORCE_MORNING') &&
         (t.hour >= 23 || t.hour < 6));
 
-/// The time's tint at night — a soft red over Nabla's own colours.
+/// The hairline's tint at night.
 const _nightTime = Color(0xFFFF8A75);
 
-/// The clock face: Nabla, a colour font — its digits carry their own
-/// palette, so the time ignores text colour. Every glyph sits in a fixed slot, measured with a
-/// TextPainter as a fraction of the font size, so a narrow "1" doesn't
+/// The clock face: Bungee Tint, a two-colour font (fill and a thin inline)
+/// — its glyphs carry their own colours, so the time ignores text colour.
+/// It replaced Nabla, which the user found hard to read. Flutter can't pick
+/// a font palette, so `fonts/BungeeTint-<Sky>.ttf` are the font with our own
+/// pair in palette 0, one per sky (see [_clockFont]). Every digit sits in a
+/// fixed slot (the widest, "0", is 0.727 em), so a narrow "1" doesn't
 /// change the clock's width from minute to minute.
-const _digitFont = 'Nabla';
-const _digitFontNight = 'NablaNight';
-const _digitSlot = 0.52;
-const _colonSlot = 0.312;
+const _digitSlot = 0.73;
+const _colonSlot = 0.384;
+
+/// The clock's font for the sky behind it: sunrise amber in the morning,
+/// sunny yellow by day, sunset coral in the evening, steel blue in the
+/// rain; after dark moonlit lavender (deep blue in the rain), and slate in
+/// red night mode (23:00–06:00).
+String _clockFont(DateTime now, {required bool night, required bool raining}) {
+  if (night) return 'BungeeTintNight';
+  if (_isDark(now)) return raining ? 'BungeeTintDarkRain' : 'BungeeTintDark';
+  if (raining) return 'BungeeTintRain';
+  if (_isMorning(now)) return 'BungeeTintMorning';
+  if (_isEvening(now)) return 'BungeeTintEvening';
+  return 'BungeeTintDay';
+}
 
 /// How much of the room it's given the face actually fills. This is the size
 /// dial, not `digitSize` — that deliberately overshoots and the `FittedBox`
@@ -163,6 +178,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     configuredAcs(),
     configuredTvs(),
     configuredBoxes(),
+    configuredSwitches(),
   );
 
   /// The room this device sits in (START_ROOM): it opens there, and goes
@@ -343,9 +359,18 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   /// low – high removed).
   /// Sized off [d], the clock's digit size, so the FittedBox scales both
   /// together.
-  Widget _weatherCard(Weather w, double d, bool night) {
+  /// Raining now (or forced with FORCE_RAIN / FORCE_CLEAR).
+  bool get _raining =>
+      (_weather?.raining == true &&
+          !const bool.fromEnvironment('FORCE_CLEAR')) ||
+      const bool.fromEnvironment('FORCE_RAIN');
+
+  /// The weather: icon over temperature beside the clock, or [inline] —
+  /// icon then temperature on one small line under the date (standing, so
+  /// the clock gets the full width).
+  Widget _weatherCard(Weather w, double d, bool night, {bool inline = false}) {
     final daylight = _now.hour >= 6 && _now.hour < 18;
-    final size = d * 0.46;
+    final size = d * (inline ? 0.3 : 0.46);
     final Widget icon;
     if (w.raining) {
       // A cloud with three drops under it.
@@ -391,9 +416,21 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         color: _hue(const Color(0xFFD5DCFF), night),
       );
     }
-    // No card behind it. Nabla like the time and date, in the same palette;
-    // its own shading keeps it legible over any sky.
-    final font = night ? _digitFontNight : _digitFont;
+    // No card behind it. The clock's font, in the same colours.
+    final font = _clockFont(_now, night: night, raining: _raining);
+    if (inline) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          icon,
+          SizedBox(width: d * 0.08),
+          Text(
+            '${w.temp}°C',
+            style: TextStyle(fontFamily: font, fontSize: d * 0.26, height: 1),
+          ),
+        ],
+      );
+    }
     return SizedBox(
       width: d * 1.3,
       child: Column(
@@ -464,6 +501,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         acs: room.acs,
         tvs: room.tvs,
         boxes: room.boxes,
+        switches: room.switches,
         night: night,
         width: width,
         unit: unit,
@@ -486,6 +524,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     final mm = _now.minute.toString().padLeft(2, '0');
     final night = _isNight(_now);
     final timeColor = night ? _nightTime : _white;
+    final clockFont = _clockFont(_now, night: night, raining: _raining);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -545,15 +584,13 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               // size whichever way up the phone is.
               final barSpan = min(w, h);
               final digitStyle = TextStyle(
-                // Palette 0 by day, palette 3 at night — the user's picks.
-                fontFamily: night ? _digitFontNight : _digitFont,
+                fontFamily: clockFont,
                 fontSize: digitSize,
                 height: 1.0,
               );
-              // The date in Nabla too, same palette as the time — Inter looked
-              // flat beside the 3D digits.
+              // The date in the clock's font too, same colours.
               final dateStyle = TextStyle(
-                fontFamily: night ? _digitFontNight : _digitFont,
+                fontFamily: clockFont,
                 fontSize: digitSize * 0.2,
                 height: 1.0,
                 letterSpacing: digitSize * 0.012,
@@ -573,7 +610,19 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                   slot(mm[1], _digitSlot),
                 ],
               );
-              final time = digits;
+              // Bungee's ink ends 0.79 down its line; the rest is empty, so
+              // the line is trimmed there and the hairline sits close under.
+              // (A fixed width too: inside the FittedBox the width is
+              // unbounded, and an OverflowBox would take all of it.)
+              final time = SizedBox(
+                width: timeWidth,
+                height: digitSize * 0.79,
+                child: OverflowBox(
+                  alignment: Alignment.topCenter,
+                  maxHeight: digitSize,
+                  child: digits,
+                ),
+              );
 
               final weather = _weather;
 
@@ -611,25 +660,19 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               // Clock on the left, the weather card on the right (the user's
               // reference: a wall panel with a frosted weather tile). On its
               // side the clock column is narrow, so the card goes under it.
+              // Standing, the weather goes on its own line under the date so
+              // the clock gets the whole width (beside it, Bungee's wide
+              // digits left the clock small — the user asked for it bigger).
               final card = weather == null
                   ? null
-                  : _weatherCard(weather, digitSize, night);
+                  : _weatherCard(weather, digitSize, night, inline: !landscape);
               final faceAndWeather = card == null
                   ? face
-                  : landscape
-                  ? Column(
+                  : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         face,
-                        SizedBox(height: gap * 2),
-                        card,
-                      ],
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        face,
-                        SizedBox(width: digitSize * 0.2),
+                        SizedBox(height: landscape ? gap * 2 : gap * 1.2),
                         card,
                       ],
                     );
@@ -643,10 +686,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                       child: _Backdrop(
                         now: _now,
                         night: night,
-                        raining:
-                            (_weather?.raining == true &&
-                                !const bool.fromEnvironment('FORCE_CLEAR')) ||
-                            const bool.fromEnvironment('FORCE_RAIN'),
+                        raining: _raining,
                         drift: Offset(_drift.dx * driftX, _drift.dy * driftY),
                         home: _room == null && _rooms.length > 1,
                       ),
@@ -823,6 +863,9 @@ const _tvViolet = Color(0xFFB69CFF);
 const _boxBlue = Color(0xFF5EC8FF);
 const _acCool = Color(0xFF4FD8EB);
 const _acHeat = Color(0xFFFF8A4C);
+
+/// Fans (Sonoff switches) — the mint of the AC's fan mode.
+const _fanGreen = Color(0xFF6EE7A0);
 
 /// The setpoint dial, 16° to 30°: cyan, mint, yellow, orange. Straight
 /// cyan-to-orange goes through grey in the middle.
@@ -1585,7 +1628,11 @@ class _GlowCard extends StatelessWidget {
     this.width,
     this.height,
     this.alert = false,
+    this.padding = 1.1,
   });
+
+  /// Inner padding, in units.
+  final double padding;
 
   final Color hue;
   final bool on;
@@ -1627,7 +1674,7 @@ class _GlowCard extends StatelessWidget {
           ),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 400),
-            padding: EdgeInsets.all(unit * 1.1),
+            padding: EdgeInsets.all(unit * padding),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -1704,6 +1751,7 @@ class Room {
     this.tvs,
     this.boxes, {
     this.pin,
+    this.switches = const [],
   });
   final String name;
 
@@ -1717,14 +1765,24 @@ class Room {
   final List<HisenseTv> tvs;
   final List<AndroidTvBox> boxes;
 
+  /// Sonoff wall switches (fans and lights) — placeholders for now.
+  final List<SonoffSwitch> switches;
+
   bool get isEmpty =>
-      lights.isEmpty && acs.isEmpty && tvs.isEmpty && boxes.isEmpty;
+      lights.isEmpty &&
+      acs.isEmpty &&
+      tvs.isEmpty &&
+      boxes.isEmpty &&
+      switches.isEmpty;
 
   /// "2 lights · 2 ACs · 1 TV", or "No devices yet".
   String get summary {
     String n(int count, String one) => '$count $one${count == 1 ? '' : 's'}';
+    final fans = switches.where((s) => s.isFan).length;
+    final lamps = lights.length + switches.length - fans;
     final parts = [
-      if (lights.isNotEmpty) n(lights.length, 'light'),
+      if (lamps > 0) n(lamps, 'light'),
+      if (fans > 0) n(fans, 'fan'),
       if (acs.isNotEmpty) n(acs.length, 'AC'),
       if (tvs.length + boxes.length > 0) n(tvs.length + boxes.length, 'TV'),
     ];
@@ -1740,10 +1798,13 @@ List<Room> _configuredRooms(
   List<Light> lights,
   List<GreeAc> acs,
   List<HisenseTv> tvs,
-  List<AndroidTvBox> boxes,
-) {
+  List<AndroidTvBox> boxes, [
+  List<SonoffSwitch> switches = const [],
+]) {
   const spec = String.fromEnvironment('ROOMS');
-  if (spec.trim().isEmpty) return [Room('Room', null, lights, acs, tvs, boxes)];
+  if (spec.trim().isEmpty) {
+    return [Room('Room', null, lights, acs, tvs, boxes, switches: switches)];
+  }
   // ROOM_PINS: "Room=1234; Other Room=5678" — rooms that ask for a code.
   final pins = <String, String>{
     for (final p in const String.fromEnvironment('ROOM_PINS').split(';'))
@@ -1785,10 +1846,16 @@ List<Room> _configuredRooms(
             if (has(b.name)) b,
         ],
         pin: pins[head.group(1)!.toLowerCase()],
+        switches: [
+          for (final s in switches)
+            if (has(s.name)) s,
+        ],
       ),
     );
   }
-  return rooms.isEmpty ? [Room('Room', null, lights, acs, tvs, boxes)] : rooms;
+  return rooms.isEmpty
+      ? [Room('Room', null, lights, acs, tvs, boxes, switches: switches)]
+      : rooms;
 }
 
 /// The home page: every room as a card; tap one to open it.
@@ -1840,6 +1907,8 @@ class HomePanel extends StatelessWidget {
             subtitle: '${rooms.length} rooms',
             icon: Icons.home_rounded,
           ),
+          SizedBox(height: gap),
+          _HomeStats(rooms: rooms, width: width, unit: u, night: night),
           SizedBox(height: gap),
           Wrap(
             spacing: gap,
@@ -2015,6 +2084,161 @@ class _StatusBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The home page's tally of the whole house: how many lights are on, how
+/// many ACs are cooling and how many screens (TVs and boxes) are on. Polls
+/// every device every 15 s while the home page is up; "–" until a count
+/// is in. A device that doesn't answer counts as off.
+class _HomeStats extends StatefulWidget {
+  const _HomeStats({
+    required this.rooms,
+    required this.width,
+    required this.unit,
+    required this.night,
+  });
+  final List<Room> rooms;
+  final double width;
+  final double unit;
+  final bool night;
+
+  @override
+  State<_HomeStats> createState() => _HomeStatsState();
+}
+
+class _HomeStatsState extends State<_HomeStats> with WidgetsBindingObserver {
+  int? _lights, _cooling, _screens;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _start();
+  }
+
+  void _start() {
+    _timer?.cancel();
+    _poll();
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _start();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _timer?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  /// [check] for each device, at once; how many said yes.
+  static Future<int> _count<T>(
+    Iterable<T> devices,
+    Future<bool> Function(T) check,
+  ) async {
+    final results = await Future.wait([
+      for (final d in devices) check(d).catchError((Object _) => false),
+    ]);
+    return results.where((on) => on).length;
+  }
+
+  Future<void> _poll() async {
+    final rooms = widget.rooms;
+    final lights = {for (final r in rooms) ...r.lights};
+    final acs = {for (final r in rooms) ...r.acs};
+    final tvs = {for (final r in rooms) ...r.tvs};
+    final boxes = {for (final r in rooms) ...r.boxes};
+    final results = await Future.wait([
+      _count(lights, (l) async => (await l.state()).on),
+      // Cooling: on in cool, dry or auto (fan and heat aren't).
+      _count(acs, (a) async {
+        final s = await a.state();
+        return s.on && s.mode <= 2;
+      }),
+      _count(tvs, (t) => t.isOn()),
+      _count(boxes, (b) async => b.isOn(await _loadAdbKey())),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _lights = results[0];
+      _cooling = results[1];
+      _screens = results[2] + results[3];
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final u = widget.unit;
+    final night = widget.night;
+    final gap = u * 0.6;
+    final tile = (widget.width - 2 * gap) / 3;
+    Widget stat(IconData icon, Color hue, int? n, String label) {
+      final c = _hue(hue, night);
+      final lit = (n ?? 0) > 0;
+      return _GlowCard(
+        hue: c,
+        on: lit,
+        unit: u,
+        width: tile,
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: u * 1.4,
+              color: lit ? c : c.withValues(alpha: 0.5),
+            ),
+            SizedBox(width: u * 0.5),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    n == null ? '–' : '$n',
+                    style: TextStyle(
+                      color: _white,
+                      fontSize: u * 1.3,
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _white.withValues(alpha: 0.55),
+                      fontSize: u * 0.65,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        stat(Icons.lightbulb_rounded, _warm, _lights, 'lights on'),
+        SizedBox(width: gap),
+        stat(Icons.ac_unit_rounded, _acCool, _cooling, 'cooling'),
+        SizedBox(width: gap),
+        stat(Icons.tv_rounded, _tvViolet, _screens, 'screens on'),
+      ],
     );
   }
 }
@@ -2329,6 +2553,7 @@ class LightsPanel extends StatefulWidget {
     this.acs = const [],
     this.tvs = const [],
     this.boxes = const [],
+    this.switches = const [],
     this.night = false,
   });
 
@@ -2349,6 +2574,9 @@ class LightsPanel extends StatefulWidget {
   /// The TV and its set-top box share one wide card under the AC tiles.
   final List<HisenseTv> tvs;
   final List<AndroidTvBox> boxes;
+
+  /// Sonoff wall switches: fans on one row, lights three to a row.
+  final List<SonoffSwitch> switches;
 
   /// Base text size; the tiles are proportioned off it.
   final double unit;
@@ -2669,7 +2897,8 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
           if (widget.lights.isEmpty &&
               widget.acs.isEmpty &&
               widget.tvs.isEmpty &&
-              widget.boxes.isEmpty) ...[
+              widget.boxes.isEmpty &&
+              widget.switches.isEmpty) ...[
             SizedBox(height: gap),
             _GlowCard(
               hue: _hue(_warm, widget.night),
@@ -2691,6 +2920,19 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
             runSpacing: gap,
             children: [for (final light in widget.lights) _tile(light, tile)],
           ),
+          for (final fans in [true, false])
+            if (widget.switches.any((s) => s.isFan == fans)) ...[
+              SizedBox(height: gap),
+              Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final s in widget.switches)
+                    if (s.isFan == fans)
+                      _switchTile(s, (widget.width - gap * 2) / 3),
+                ],
+              ),
+            ],
           if (widget.acs.isNotEmpty) ...[
             SizedBox(height: gap),
             Wrap(
@@ -2718,7 +2960,8 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
           if (widget.lights.isNotEmpty ||
               widget.acs.isNotEmpty ||
               widget.tvs.isNotEmpty ||
-              widget.boxes.isNotEmpty) ...[
+              widget.boxes.isNotEmpty ||
+              widget.switches.isNotEmpty) ...[
             SizedBox(height: gap),
             _statusLine(),
           ],
@@ -2896,6 +3139,90 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
             _presetBar(light, hue, on: on, level: level, busy: busy),
           ],
         ],
+      ),
+    );
+  }
+
+  /// A Sonoff switch: a small button with a fan or lamp icon, its name and
+  /// state. Not wired up yet — every one reads "Not set up" and does
+  /// nothing when tapped.
+  Widget _switchTile(SonoffSwitch sw, double size) {
+    final u = widget.unit;
+    final n = sw.name.toLowerCase();
+    // Hugeicons, picked by the user's naming.
+    final icon = sw.isFan
+        ? HugeIcons.strokeRoundedFan01
+        : n.contains('wall')
+        ? HugeIcons.strokeRoundedLampWallDown
+        : n.contains('cabinet')
+        ? HugeIcons.strokeRoundedCabinet01
+        : n.contains('hanging')
+        ? HugeIcons.strokeRoundedLamp02
+        : n.contains('ceiling')
+        ? HugeIcons.strokeRoundedLampCeiling
+        : HugeIcons.strokeRoundedBulb;
+    final hue = _hue(sw.isFan ? _fanGreen : _warm, widget.night);
+    return _GlowCard(
+      hue: hue,
+      on: false,
+      unit: u,
+      width: size,
+      height: size * 0.82,
+      padding: 0.8,
+      child: Opacity(
+        opacity: sw.isSetUp ? 1 : 0.55,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: u * 2.2,
+                  height: u * 2.2,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _white.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(u * 0.7),
+                  ),
+                  child: HugeIcon(icon: icon, size: u * 1.4, color: hue),
+                ),
+                Icon(
+                  Icons.power_settings_new_rounded,
+                  size: u * 1.0,
+                  color: _white.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sw.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: _white,
+                    fontSize: u * 0.78,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+                Text(
+                  sw.isSetUp ? 'Off' : 'Not set up',
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: _white.withValues(alpha: 0.5),
+                    fontSize: u * 0.62,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

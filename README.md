@@ -15,9 +15,10 @@ charging, without giving up the clock.
 
 ## Look
 
-- **Clock** in [Nabla](https://nabla.typearture.com/), a colour font:
-  yellow-orange (palette 0) by day, slate (palette 3) at night. The date is
-  red, with the current weather beside it — sunny / clear / rain and the
+- **Clock** in [Bungee Tint](https://fonts.google.com/specimen/Bungee+Tint),
+  a two-colour font, coloured to match the sky: sunrise amber, sunny
+  yellow, sunset coral, steel blue in the rain, moonlit lavender after
+  dark and slate in night mode. The date is in it too, with the current weather beside it — sunny / clear / rain and the
   temperature, from [Open-Meteo](https://open-meteo.com/) (set
   `WEATHER_AT` to your `lat,lon` in `lights.json`).
 - **Sky** behind everything changes with the time and weather: a sunrise
@@ -181,10 +182,10 @@ standby.
 
 ## Font
 
-**Nabla** (by Arthur Reinders Folmer and Just van Rossum) for the clock and
-**Inter** (by Rasmus Andersson) for everything else, both SIL OFL, in
-`fonts/` with their licenses. `Nabla-Night.ttf` is Nabla with its palette 3
-made the default, since Flutter can't choose a colour font's palette.
+**Bungee Tint** (by David Jonathan Ross) for the clock and **Inter** (by
+Rasmus Andersson) for everything else, both SIL OFL, in `fonts/` with their
+licenses. Each `BungeeTint-<Sky>.ttf` is Bungee Tint with our own two
+colours in palette 0, since Flutter can't choose a colour font's palette.
 
 ## Battery
 

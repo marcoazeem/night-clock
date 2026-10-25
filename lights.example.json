@@ -7,7 +7,8 @@
   "HISENSE_TV": "TV=192.168.1.50/aabbccddeeff",
   "WEATHER_AT": "51.5072,-0.1276",
   "BEYOND_TV": "Beyond TV=192.168.1.60",
-  "ROOMS": "Bedroom (Master)=Bed,Desk,Bedroom,TV; Living Room=Beyond TV; Kitchen=",
+  "SONOFF_SWITCHES": "Ceiling Fan, Ceiling Light=192.168.1.70",
+  "ROOMS": "Bedroom (Master)=Bed,Desk,Bedroom,TV; Living Room=Beyond TV; Kitchen=Ceiling Fan,Ceiling Light",
   "START_ROOM": "Bedroom",
   "ROOM_PINS": "Kitchen=1234"
 }

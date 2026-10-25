@@ -40,6 +40,7 @@ dependencies:
   crypto: ^3.0.7
   pointycastle: ^4.0.0
   video_player: ^2.14.1
+  hugeicons: 1.2.0
 
 dev_dependencies:
   flutter_test:
@@ -51,6 +52,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_svg: ^2.3.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -68,15 +70,30 @@ flutter:
     - assets/video/
 
   fonts:
-    # The clock's digits and colon only — a colour font. Nabla-Night is the
-    # same font with its palette 3 (slate) moved into slot 0, since Flutter
-    # can't pick a font palette; Nabla is palette 0 (yellow-orange).
-    - family: Nabla
+    # The clock's time, date and temperature — Bungee Tint, a two-colour
+    # font. Flutter can't pick a font palette, so each is the font with our
+    # own (fill, inline) pair in palette 0, one per sky (_clockFont).
+    - family: BungeeTintMorning
       fonts:
-        - asset: fonts/Nabla.ttf
-    - family: NablaNight
+        - asset: fonts/BungeeTint-Morning.ttf
+    - family: BungeeTintDay
       fonts:
-        - asset: fonts/Nabla-Night.ttf
+        - asset: fonts/BungeeTint-Day.ttf
+    - family: BungeeTintEvening
+      fonts:
+        - asset: fonts/BungeeTint-Evening.ttf
+    - family: BungeeTintRain
+      fonts:
+        - asset: fonts/BungeeTint-Rain.ttf
+    - family: BungeeTintDark
+      fonts:
+        - asset: fonts/BungeeTint-Dark.ttf
+    - family: BungeeTintDarkRain
+      fonts:
+        - asset: fonts/BungeeTint-DarkRain.ttf
+    - family: BungeeTintNight
+      fonts:
+        - asset: fonts/BungeeTint-Night.ttf
     # Everything else — the date, the dashboard's labels and readouts.
     - family: Inter
       fonts:

@@ -435,3 +435,43 @@ class MiLight extends Light {
 class _MiError extends LightException {
   _MiError(super.message);
 }
+
+// ---------------------------------------------------------------- Sonoff
+
+/// A Sonoff wall switch driving a fan or a light (SONOFF_SWITCHES). The
+/// switches aren't installed yet, so this is a placeholder: the dashboard
+/// shows a button for each, marked "Not set up". When they arrive, give
+/// each entry its address (`Name=IP`) and fill in [isOn] / [setPower]
+/// (eWeLink LAN mode, or DIY mode's HTTP API on port 8081).
+class SonoffSwitch {
+  SonoffSwitch(this.name, this.host);
+  final String name;
+
+  /// The switch's IP, once it has one.
+  final String? host;
+
+  /// "Fan 1", "Kitchen Fan" — anything with "fan" in its name.
+  bool get isFan => name.toLowerCase().contains('fan');
+
+  /// False until the protocol is written.
+  bool get isSetUp => false;
+
+  Future<bool> isOn() async => throw LightException('Not set up yet');
+  Future<void> setPower(bool on) async =>
+      throw LightException('Not set up yet');
+}
+
+/// "Fan 1, Ceiling 1, Hanging Light=192.168.1.70" — names, each with an
+/// optional address.
+List<SonoffSwitch> configuredSwitches() => [
+  for (final part in const String.fromEnvironment(
+    'SONOFF_SWITCHES',
+  ).split(','))
+    if (part.split('=').first.trim().isNotEmpty)
+      SonoffSwitch(
+        part.split('=').first.trim(),
+        part.contains('=') && part.split('=')[1].trim().isNotEmpty
+            ? part.split('=')[1].trim()
+            : null,
+      ),
+];

@@ -73,10 +73,14 @@ app builds fine but the lights panel silently disappears.
   h * 1.15)`) deliberately overshoots and the outer `FittedBox` scales the
   column down to fit — `BoxFit.scaleDown` never scales *up*, so an
   undershoot leaves the digits small with no way back. Each glyph sits in
-  a fixed slot (`_digitSlot` 0.52, `_colonSlot` 0.312 × font size,
-  measured with a `TextPainter`; Nabla's "1" is narrower even with tabular
-  figures), so `timeWidth` is `digitSize * (4 * 0.52 + 0.312)` and the
-  clock doesn't resize as the minutes change. The hairline is capped to
+  a fixed slot (`_digitSlot` 0.73, `_colonSlot` 0.384 × font size — Bungee
+  Tint's widest digit "0" is 0.727 em, and its digits are proportional),
+  so `timeWidth` is `digitSize * (4 * 0.73 + 0.384)` and the clock doesn't
+  resize as the minutes change. Bungee's ink ends 0.79 down its line box,
+  so the time row is trimmed to that height (OverflowBox) and the hairline
+  sits close under it. That box needs `width: timeWidth` too: inside the
+  FittedBox the width is unbounded, an OverflowBox takes it all, and the
+  release build silently drew no clock, date or weather at all (Oct 2026). The hairline is capped to
   `faceWidth` (`timeWidth * 0.61`), and so is the date.
 - Face size is set by the *box*, not by `digitSize` — the `FittedBox`
   refills whatever room it's handed, so scaling `digitSize` does nothing
@@ -85,18 +89,21 @@ app builds fine but the lights panel silently disappears.
   1.0 tall: full width ran the last digit into a dark patch at the top
   right of this phone's OLED (the user can't see that corner), so keep
   the top-right clear. On its side it's still 0.8 × 0.8.
-- Clock font: **Nabla** (Google Fonts, a COLRv1 colour font — the user
-  chose it), so the digits carry their own colours and ignore text colour.
-  The user picked palettes on nabla.typearture.com: **0** (yellow-orange)
-  by day, **3** (slate) at night. Flutter can't select a font palette, so
-  `fonts/Nabla-Night.ttf` is Nabla with palette 3 copied into slot 0
-  (fontTools, CPAL) — family `NablaNight`. Flutter renders COLRv1 fine on
-  the Note 8 (checked on device). DSEG7, its unlit-segment layer and the
-  red "1"s went with the switch. Nabla covers A–Z, digits and · too.
+- Clock font: **Bungee Tint** (Google Fonts, David Jonathan Ross; COLRv0,
+  two colours: a fill and a thin inline). It replaced Nabla on 24 Oct 2026
+  — the user found Nabla's 3D digits hard to read at times — and asked for
+  its colours to follow the day, night and weather. Flutter can't select
+  a font palette, so `fonts/BungeeTint-<Sky>.ttf` are the font with our
+  own pair in CPAL palette 0 (fontTools; the script was a one-off), each
+  its own family: Morning amber/cream, Day yellow/orange, Evening coral,
+  Rain steel blue, Dark (19–23) moonlit lavender, DarkRain deep blue,
+  Night (23–06, red mode) slate. `_clockFont(now, night:, raining:)` picks
+  one; time, date and temperature all use it. Uppercase-only font (fine:
+  the date is uppercase). Covers digits, A–Z, ·, ° and C.
 - Everything else is **Inter** (bundled, 300–700), set app-wide as the
-  theme font. The date is Nabla too (same day/night palette as the time,
-  `dateStyle`) — in red Inter it looked out of place beside the 3D digits
-  (the user said so).
+  theme font. The date is in the clock's font too (same palette as
+  the time, `dateStyle`) — in red Inter it looked out of place (the user
+  said so).
 - Gestures: vertical swipe = dim, and that's all — long-press 12/24h and
   double-tap seconds were removed at the user's request. The dim level
   persists via SharedPreferences. The 8-second hint says "swipe up / down
@@ -190,7 +197,10 @@ app builds fine but the lights panel silently disappears.
   Bedroom: Warm/White Light, Bedroom + AC 2 ACs, the Hisense "TV"),
   **Sitting Room** (Beyond TV), **Kitchen** (nothing yet). Without ROOMS
   it's one room and no home page, as before.
-- `HomePanel` (home page): a 2×2 grid of room cards (icon by name — bed /
+- `HomePanel` (home page): under the header, a tally of the whole house
+  (`_HomeStats` / `NCHomeStats`) — three tiles: lights on, ACs cooling
+  (on in cool/dry/auto), screens on (TVs + boxes) — polling every device
+  every 15 s while the home page is up; no answer counts as off. Then a 2×2 grid of room cards (icon by name — bed /
   sofa / kitchen — name, subtitle or "2 lights · 1 AC", "Here" on this
   device's room). Tap a card → that room's `LightsPanel`; the header's
   house tile goes back home. Each device opens on `START_ROOM` (phone: in
@@ -215,6 +225,25 @@ app builds fine but the lights panel silently disappears.
 - iPad: the same in Panel.m (`NCRoom`, `NCConfiguredRooms`, `NCHomeView`,
   `NCPanelView initWithRoom:`) and ClockViewController (`showRoom:`,
   `NCTouchView` for the idle timer).
+
+## Sonoff switches (placeholders, Oct 2026)
+
+- The user plans Sonoff wall switches: Sitting Room — Fan 1, Fan 2,
+  Ceiling 1–4, Wall 1, Wall 2; Kitchen — Kitchen Fan, Cabinet Lights,
+  Ceiling Light, Hanging Light. Not installed yet, so they're buttons
+  only: `SONOFF_SWITCHES` in lights.json (names, each may get `=IP`
+  later), placed by ROOMS like any device. `SonoffSwitch` (lights.dart) /
+  `NCSonoffSwitch` (Devices.m) has `isSetUp` NO and stub `isOn`/`setPower`
+  — write the protocol there (eWeLink LAN mode, or DIY mode's HTTP API on
+  port 8081) and flip `isSetUp`.
+- UI (`_switchTile` / `NCSwitchTile`): small tiles three to a row, fans
+  on their own row first (mint `_fanGreen`), lights after (amber), each
+  greyed with "Not set up". Icons are **Hugeicons** (the user asked;
+  `hugeicons` package, stroke rounded), picked by name: Fan01, LampCeiling,
+  Lamp02 (hanging), LampWallDown (wall), Cabinet01, Bulb. The iPad's
+  copies are drawn from the same SVG paths in glyphs_test.dart (via
+  flutter_svg, a dev dependency for that). Fans count in a room's summary
+  ("6 lights · 2 fans"); not yet in the home tally.
 
 ## Air conditioner (lib/gree.dart, `AcPanel` in main.dart)
 
@@ -358,10 +387,12 @@ app builds fine but the lights panel silently disappears.
   the Maldives). Only rain vs not: WMO code ≥ 51 or precipitation > 0.1.
   Shown right of the clock (`_weatherCard`, layout from a wall-panel photo
   the user sent) with no card behind it — the user had the frosted tile
-  removed. Its temperature and range are Nabla too, like the time and date
+  removed. Its temperature is in the clock's font too, like the time and date
   (the user asked for the whole top to match); the icon is Material: sun (06–18) / moon / cloud with drops,
-  the temp now, and today's low ~ high (Open-Meteo daily min/max). On its
-  side the card goes under the clock. Its right edge keeps the clock's
+  the temp now, and today's low ~ high (Open-Meteo daily min/max). Standing, it's one small line (icon then temperature) under
+  the date, so the clock gets the full width — beside it Bungee's wide
+  digits left the clock small and the user asked for it bigger (Oct
+  2026). On its side the card goes under the clock. Its right edge keeps the clock's
   old margin, clear of the dead top-right patch.
 - Preview other times with dart-defines `FORCE_NIGHT`, `FORCE_MORNING`,
   `FORCE_RAIN`, `FORCE_CLEAR` (ignores live rain) (=true). Always reinstall a plain build afterwards — the
@@ -371,9 +402,10 @@ app builds fine but the lights panel silently disappears.
 
 ## Fonts (fonts/)
 
-Nabla.ttf + Nabla-Night.ttf (see above) with OFL-Nabla.txt; Inter
-Light/Regular/Medium/SemiBold/Bold with OFL-Inter.txt. DSEG7 was removed
-when the user switched the clock to Nabla.
+BungeeTint-{Morning,Day,Evening,Rain,Dark,DarkRain,Night}.ttf (see above)
+with OFL-BungeeTint.txt; Inter Light/Regular/Medium/SemiBold/Bold with
+OFL-Inter.txt. DSEG7 and then Nabla were removed when the clock font
+changed.
 
 ## Verifying visuals without the phone
 
@@ -392,7 +424,7 @@ Two traps that cost real time:
   mistake fails fast.
 - Ahem is far wider than the real platform font, so never size a layout
   from an Ahem render — the golden shows the date binding the width when
-  on-device it doesn't. Measure the Nabla digits (which do render for
+  on-device it doesn't. Measure the clock digits (colour fonts do render for
   real) and cap the other rows to that.
 
 ## Measured battery reality (Aug 2026)
@@ -430,9 +462,10 @@ them by hand when the user wants both.
   `idevicedebug -n --detach run …`, `idevicescreenshot -n`) (reads lights.json;
   `FORCE_NIGHT=1` etc. work as env vars). Output in `ipad/build/`
   (gitignored — it holds Config.h with the keys).
-- Nabla can't render on iOS 10 (COLRv1), so `ipad/tool/glyphs_test.dart`
-  renders every character and Material icon to PNGs via `flutter test`;
-  the app draws those. Add an icon there when the panel needs a new one.
+- iOS 10 can't draw the colour font, so `ipad/tool/glyphs_test.dart`
+  renders every character (once per sky palette, `<palette>_<hex>.png`)
+  and Material icon to PNGs via `flutter test`; the app draws those
+  (`NCGlyphs`, palette from `NCClockPalette`, matching `_clockFont`). Add an icon there when the panel needs a new one.
 - Toolchain tricks (all in build.sh): the iOS 10.3 SDK from theos/sdks in
   `~/Library/Developer/LegacySDKs`, patched by `ipad/tool/fix_sdk.py`
   (simulator archs out of the .tbd stubs, armv7 objc_msgSend_stret in);
