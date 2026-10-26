@@ -25,6 +25,10 @@ charging, without giving up the clock.
   and soft sun in the morning (06–11), deep blue by day, a sunset glow
   (17–19), stars once it's dark (19–06), and rain falling whenever it
   rains.
+- **Lights as lightboxes**: each bulb sits in a little shadow box with a
+  wall switch. Tap the box to switch it; on, the bulb lights and its glow
+  fills the box, brighter with the level. A bulb with a colour
+  temperature (a Yeelight) gets a warm → cool strip across the top.
 - **Frosted-glass cards**, each in its device's own colour — amber and
   icy white for the bulbs, violet for the TV, and the AC's colour follows
   its mode (cyan cooling, orange heating).
@@ -186,6 +190,15 @@ standby.
 Rasmus Andersson) for everything else, both SIL OFL, in `fonts/` with their
 licenses. Each `BungeeTint-<Sky>.ttf` is Bungee Tint with our own two
 colours in palette 0, since Flutter can't choose a colour font's palette.
+
+## Lightbox
+
+The light tiles are based on
+[Lightbox](https://rive.app/marketplace/19639-36948-lightbox/) by Gary
+Simon ([DesignCourse](https://designcourse.com/)), shared on the Rive
+marketplace under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The bulb pictures in `assets/images/` come from that file; the box,
+switch and colour strip are redrawn in code in a dark style.
 
 ## Battery
 

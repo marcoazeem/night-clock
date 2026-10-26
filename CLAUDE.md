@@ -148,6 +148,28 @@ app builds fine but the lights panel silently disappears.
   rarely lands exactly on one. (A slider came
   and went — the user replaced it with the presets.) Which lights get
   dimming is `DIMMABLE_LIGHTS` in lights.json, not the brand.
+- **Lightbox tiles (26 Oct 2026)** replaced that power-button look: the
+  user picked the Rive "Lightbox" (Gary Simon, CC BY 4.0 — credited in both
+  READMEs; keep the credit). Each light tile (`_tile` / `NCLightTile`,
+  1.32× as tall as wide) is a shadow box (`_LightBoxPainter`, dark walls in
+  perspective, the light's colour pooling on the back wall with the level)
+  holding a wall switch (`_WallSwitch`, rocker up + lit when on) and the
+  bulb photo (`assets/images/bulb_lit|unlit.png`, extracted from the .riv;
+  build.sh copies them to the iPad). Tapping the box — the user asked for
+  the on/off to be the switch inside it — toggles. Name + state under the
+  box, then the presets. The White Light is a Yeelight Color Bulb
+  (`yeelink.light.color3`, legacy miIO): `get_prop ct`, `set_ct_abx`
+  1700–6500 K (accepted even while off); `hasKelvin` turns on once a read
+  reports ct. Its glow follows the kelvin (`_kelvinColor`: amber at the
+  warm end, icy sky at the cool end). Press and hold its box →
+  `_KelvinSheet` / `NCKelvinSheet`: a glass card over a dimmed screen with
+  the kelvin, a thick candle → daylight slider (sends every 0.4 s while
+  dragging and on release) and big presets. (A thin strip across the top
+  of the box came first — the user found it ugly.) The state line under a
+  light is just "On · 50%" / "Off" — the user called "Warm Glow" /
+  "Daylight" useless text. White temperature only, not RGB (user's choice).
+  On the iPad the controller's press-and-hold dimmer skips that box
+  (`isDialAt`).
 - Dashboard styling: see Look below. Header (same mock-up): the home icon
   in a rounded square, ROOM DASHBOARD (renamed from LIGHTS) with "Master
   Bedroom" under it (the user named the room), and two scene pills — GN
@@ -272,6 +294,10 @@ app builds fine but the lights panel silently disappears.
   `LightsPanel.acs`). Gree+ shows only the MAC, not the IP — find IPs by
   broadcasting `{"t":"scan"}` to UDP 7000 on the subnet and decrypting the
   replies with the generic ECB key.
+- A room with a single AC (M&M's Room since AC 2 moved) shows it as one
+  wide card (`AcPanel(wide:)` / `NCAcTile.wide`, 10.5 units tall): name,
+  mode and "Room 25°" left, dial centre, power top-right with − / + under
+  it — the user asked for the lone AC to fill the row.
 - UI: one tile per AC, two side by side under the light squares, same
   width as a light tile but 1.3× as tall so the dial has room (it was a
   wide card per AC, then the user wanted both visible at once). Name and
@@ -444,8 +470,11 @@ apps without root — don't retry that.
 
 ## Repo
 
-Public: github.com/marcoazeem/night-clock. Commit and push only when the
-user says so (they ask explicitly, usually as "commit and push").
+Public: github.com/marcoazeem/night-clock. Push only when the user says
+so (they ask explicitly, usually as "commit and push"). But **commit
+before starting a new feature** — both this repo and `ipad/` — so a
+feature that gets dropped can be undone cleanly (the user asked for this,
+26 Oct 2026).
 
 ## iPad version (ipad/) — the old iPad "Haam"
 
@@ -487,3 +516,9 @@ them by hand when the user wants both.
   mv.seastack.nightclock`. Screenshots come out portrait (rotate them).
 - The iPad has its own ADB key (keychain), so the Beyond box asked for
   approval once for it too.
+- A voice assistant was tried (26 Oct 2026: offline Pocketsphinx, wake
+  word "hey night clock", fixed commands) and removed the same day — it
+  didn't respond on the iPad and the user dropped it. Don't re-add unless
+  asked; if so, the iPad's NSLog output doesn't reach idevicesyslog when
+  launched via idevicedebug, so log to a file (UIFileSharingEnabled for
+  afcclient) from the start.

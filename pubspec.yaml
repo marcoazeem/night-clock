@@ -68,6 +68,7 @@ flutter:
   # Daytime background videos (sunny / rainy). Gitignored; see .gitignore.
   assets:
     - assets/video/
+    - assets/images/
 
   fonts:
     # The clock's time, date and temperature — Bungee Tint, a two-colour

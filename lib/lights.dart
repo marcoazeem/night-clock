@@ -29,9 +29,12 @@ class LightException implements Exception {
 /// What a bulb last reported. [brightness] is null when it can't dim, or
 /// when it didn't say.
 class LightState {
-  const LightState(this.on, [this.brightness]);
+  const LightState(this.on, [this.brightness, this.kelvin]);
   final bool on;
   final int? brightness;
+
+  /// Colour temperature in kelvin, for a bulb that has one.
+  final int? kelvin;
 }
 
 abstract class Light {
@@ -48,6 +51,18 @@ abstract class Light {
 
   /// Sets [percent] and turns the light on with it.
   Future<void> setBrightness(int percent);
+
+  /// Whether it can change from warm to cool white — known once [state]
+  /// has reported a colour temperature.
+  bool get hasKelvin => false;
+
+  /// The range [setKelvin] takes.
+  int get minKelvin => 1700;
+  int get maxKelvin => 6500;
+
+  /// Sets the colour temperature; the bulb must be on.
+  Future<void> setKelvin(int kelvin) =>
+      throw LightException('$name has no colour temperature');
 }
 
 /// Lights from the build's dart-defines, in the order given. Empty when the
@@ -289,6 +304,10 @@ class MiLight extends Light {
   late final List<int> _iv;
   int _id = 1 + _random.nextInt(9000);
   bool? _miot;
+  bool _kelvin = false;
+
+  @override
+  bool get hasKelvin => _kelvin;
 
   @override
   Future<LightState> state() => _either(
@@ -297,13 +316,39 @@ class MiLight extends Light {
         {'did': 'on', 'siid': 2, 'piid': 1},
         {'did': 'bright', 'siid': 2, 'piid': 2},
       ]);
-      return LightState(r[0] == true, (r[1] as num?)?.toInt());
+      // A white-only bulb has no piid 3; ask separately so it can't fail
+      // the whole reading.
+      int? k;
+      try {
+        k = ((await _properties('get_properties', [
+          {'did': 'ct', 'siid': 2, 'piid': 3},
+        ]))[0] as num?)?.toInt();
+      } on LightException {
+        k = null;
+      }
+      _kelvin = k != null && k > 0;
+      return LightState(r[0] == true, (r[1] as num?)?.toInt(), k);
     },
+    // Yeelights (the user's yeelink.light.color3) answer here; "ct" is ""
+    // on a bulb without it.
     legacy: () async {
-      final r = await _send('get_prop', ['power', 'bright']) as List;
-      return LightState(r[0] == 'on', int.tryParse('${r[1]}'));
+      final r = await _send('get_prop', ['power', 'bright', 'ct']) as List;
+      final k = int.tryParse('${r[2]}');
+      _kelvin = k != null && k > 0;
+      return LightState(r[0] == 'on', int.tryParse('${r[1]}'), k);
     },
   );
+
+  @override
+  Future<void> setKelvin(int kelvin) {
+    final k = kelvin.clamp(minKelvin, maxKelvin);
+    return _either(
+      miot: () => _properties('set_properties', [
+        {'did': 'ct', 'siid': 2, 'piid': 3, 'value': k},
+      ]),
+      legacy: () => _send('set_ct_abx', [k, 'smooth', 300]),
+    );
+  }
 
   @override
   Future<void> setPower(bool on) => _either(

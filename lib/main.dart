@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:io' show InternetAddressType, NetworkInterface;
 import 'dart:math';
+import 'dart:ui' show ImageFilter, FontFeature;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
@@ -122,6 +123,13 @@ const _faceScale = 0.8;
 /// date or a wide platform font would, and the digits would shrink to suit.
 /// The brightness presets on a dimmable light's tile.
 const _presets = [1, 25, 50, 100];
+
+/// The index of the preset nearest [level], or null.
+int? _nearestPreset(int? level) => level == null
+    ? null
+    : _presets.indexOf(
+        _presets.reduce((a, b) => (a - level).abs() <= (b - level).abs() ? a : b),
+      );
 
 Widget _capWidth(double width, Widget child) {
   return SizedBox(
@@ -1699,6 +1707,597 @@ class _GlowCard extends StatelessWidget {
   }
 }
 
+/// The White Light's colour-temperature sheet: the light's name and its
+/// kelvin, a thick warm → cool slider (candle to daylight) whose knob
+/// carries the colour, and the 1 / 25 / 50 / 100% presets. Drags send
+/// at most every 0.4 s and once more on release.
+class _KelvinSheet extends StatefulWidget {
+  const _KelvinSheet({
+    required this.light,
+    required this.unit,
+    required this.night,
+    required this.state,
+    required this.onState,
+  });
+
+  final Light light;
+  final double unit;
+  final bool night;
+  final LightState state;
+  final ValueChanged<LightState> onState;
+
+  @override
+  State<_KelvinSheet> createState() => _KelvinSheetState();
+}
+
+class _KelvinSheetState extends State<_KelvinSheet> {
+  late int _kelvin = widget.state.kelvin ?? 4000;
+  late int? _level = widget.state.brightness;
+  late bool _on = widget.state.on;
+  DateTime _sent = DateTime(0);
+  bool _failed = false;
+
+  Light get light => widget.light;
+
+  LightState get _now => LightState(_on, _level, _kelvin);
+
+  Future<void> _send({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force && now.difference(_sent) < const Duration(milliseconds: 400)) {
+      return;
+    }
+    _sent = now;
+    final k = _kelvin;
+    try {
+      await light.setKelvin(k);
+      _failed = false;
+      widget.onState(_now);
+    } catch (_) {
+      _failed = true;
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _preset(int pct) async {
+    setState(() {
+      _level = pct;
+      _on = true;
+    });
+    try {
+      await light.setBrightness(pct);
+      _failed = false;
+      widget.onState(_now);
+    } catch (_) {
+      _failed = true;
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _at(double x, double w) {
+    final t = (x / w).clamp(0.0, 1.0);
+    final k = (light.minKelvin + t * (light.maxKelvin - light.minKelvin)).round();
+    // Snap to 50 K so the readout doesn't flicker through every value.
+    setState(() => _kelvin = (k / 50).round() * 50);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final u = widget.unit;
+    final night = widget.night;
+    final hue = _hue(_kelvinColor(_kelvin), night);
+    final t = (_kelvin - light.minKelvin) / (light.maxKelvin - light.minKelvin);
+    final media = MediaQuery.of(context);
+    final width = min(media.size.width - 32, u * 34);
+    final trackH = u * 3.2;
+
+    Text label(String s, {double a = 0.55, double size = 0.75}) => Text(
+      s,
+      style: TextStyle(
+        color: _white.withValues(alpha: a),
+        fontSize: u * size,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(bottom: u * 1.2),
+        child: Center(
+          heightFactor: 1,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(u * 1.8),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+              child: Container(
+                width: width,
+                padding: EdgeInsets.all(u * 1.4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(u * 1.8),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.alphaBlend(
+                        hue.withValues(alpha: _on ? 0.22 : 0.08),
+                        const Color(0xE61A1C22),
+                      ),
+                      const Color(0xF0121318),
+                    ],
+                  ),
+                  border: Border.all(color: _white.withValues(alpha: 0.12)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: u * 2.8,
+                          height: u * 2.8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: hue.withValues(alpha: _on ? 0.9 : 0.15),
+                            boxShadow: _on
+                                ? [
+                                    BoxShadow(
+                                      color: hue.withValues(alpha: 0.6),
+                                      blurRadius: u * 1.2,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Icon(
+                            Icons.lightbulb_rounded,
+                            size: u * 1.5,
+                            color: _on
+                                ? Colors.black.withValues(alpha: 0.75)
+                                : hue,
+                          ),
+                        ),
+                        SizedBox(width: u * 0.9),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                light.name,
+                                style: TextStyle(
+                                  color: _white,
+                                  fontSize: u * 1.15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              label(
+                                _failed
+                                    ? 'Not answering'
+                                    : _on
+                                    ? 'Colour temperature'
+                                    : 'Off — the colour applies when it turns on',
+                                a: _failed ? 1 : 0.55,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '$_kelvin K',
+                          style: TextStyle(
+                            color: hue,
+                            fontSize: u * 1.5,
+                            fontWeight: FontWeight.w300,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: u * 1.6),
+                    LayoutBuilder(
+                      builder: (context, c) {
+                        final w = c.maxWidth;
+                        final knob = trackH + u * 0.6;
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapDown: (d) {
+                            _at(d.localPosition.dx, w);
+                            _send(force: true);
+                          },
+                          onHorizontalDragStart: (d) =>
+                              _at(d.localPosition.dx, w),
+                          onHorizontalDragUpdate: (d) {
+                            _at(d.localPosition.dx, w);
+                            _send();
+                          },
+                          onHorizontalDragEnd: (_) => _send(force: true),
+                          child: SizedBox(
+                            height: knob,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              alignment: Alignment.centerLeft,
+                              children: [
+                                Container(
+                                  height: trackH,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      trackH / 2,
+                                    ),
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        for (final k in [
+                                          1700,
+                                          2400,
+                                          3200,
+                                          4200,
+                                          5200,
+                                          6500,
+                                        ])
+                                          _hue(_kelvinColor(k), night),
+                                      ],
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.35,
+                                        ),
+                                        blurRadius: u * 0.4,
+                                        offset: Offset(0, u * 0.1),
+                                      ),
+                                    ],
+                                  ),
+                                  // A soft top highlight, like a glass rod.
+                                  foregroundDecoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      trackH / 2,
+                                    ),
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.white.withValues(alpha: 0.28),
+                                        Colors.white.withValues(alpha: 0),
+                                        Colors.black.withValues(alpha: 0.12),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  left: (t * (w - knob)).clamp(0, w - knob),
+                                  child: Container(
+                                    width: knob,
+                                    height: knob,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: _hue(_kelvinColor(_kelvin), night),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: u * 0.28,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.45,
+                                          ),
+                                          blurRadius: u * 0.7,
+                                          offset: Offset(0, u * 0.15),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    SizedBox(height: u * 0.6),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.local_fire_department_rounded,
+                          size: u * 0.9,
+                          color: _hue(_kelvinColor(1700), night),
+                        ),
+                        SizedBox(width: u * 0.3),
+                        label('Candle'),
+                        const Spacer(),
+                        label('Daylight'),
+                        SizedBox(width: u * 0.3),
+                        Icon(
+                          Icons.wb_sunny_rounded,
+                          size: u * 0.9,
+                          color: _hue(_kelvinColor(6500), night),
+                        ),
+                      ],
+                    ),
+                    if (light.dimmable) ...[
+                      SizedBox(height: u * 1.4),
+                      Row(
+                        children: [
+                          for (final (i, pct) in _presets.indexed) ...[
+                            if (i > 0) SizedBox(width: u * 0.6),
+                            Expanded(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => _preset(pct),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 250),
+                                  height: u * 2.8,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(u * 1.4),
+                                    color: _on && _nearestPreset(_level) == i
+                                        ? hue
+                                        : _surface,
+                                    border: Border.all(color: _surfaceEdge),
+                                  ),
+                                  child: Text(
+                                    '$pct%',
+                                    style: TextStyle(
+                                      color: _on && _nearestPreset(_level) == i
+                                          ? Colors.black
+                                          : _white.withValues(alpha: 0.75),
+                                      fontSize: u * 0.85,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A colour temperature as a colour (Tanner Helland's fit, softened so
+/// 6500 K reads as daylight rather than blue).
+Color _kelvinColor(int kelvin) {
+  final t = kelvin / 100;
+  double r, g, b;
+  if (t <= 66) {
+    r = 255;
+    g = 99.47 * log(t) - 161.12;
+    b = t <= 19 ? 0 : 138.52 * log(t - 10) - 305.04;
+  } else {
+    r = 329.7 * pow(t - 60, -0.1332);
+    g = 288.12 * pow(t - 60, -0.0755);
+    b = 255;
+  }
+  int c(double v) => v.clamp(0, 255).round();
+  // The raw curve is pale near the middle; pull it towards the app's amber
+  // at the warm end so the strip runs amber → white → sky.
+  final raw = Color.fromARGB(255, c(r), c(g), c(b));
+  // …and towards icy sky at the cool end, so daylight isn't plain white.
+  final warmth = ((3500 - kelvin) / 1800).clamp(0.0, 1.0);
+  final coolness = ((kelvin - 4500) / 2000).clamp(0.0, 1.0);
+  return Color.lerp(
+    Color.lerp(raw, _warm, warmth * 0.6)!,
+    const Color(0xFFA8D4FF),
+    coolness * 0.7,
+  )!;
+}
+
+/// The lightbox's shadow box: a frame, four walls in perspective and a
+/// back wall. Dark glass when off; on, the light's colour pools on the
+/// back wall around the bulb and spills onto the floor and walls.
+class _LightBoxPainter extends CustomPainter {
+  _LightBoxPainter({
+    required this.hue,
+    required this.on,
+    required this.level,
+    required this.offline,
+    required this.unit,
+  });
+
+  final Color hue;
+  final bool on;
+  final double level;
+  final bool offline;
+  final double unit;
+
+  /// The opening inside the frame.
+  static Rect opening(Rect r, double u) => r.deflate(u * 0.55);
+
+  /// The back wall, set back from the opening (seen a little from above).
+  static Rect backWall(Rect r, double u) {
+    final o = opening(r, u);
+    final d = o.shortestSide * 0.12;
+    return Rect.fromLTRB(
+      o.left + d,
+      o.top + d * 0.8,
+      o.right - d,
+      o.bottom - d * 1.3,
+    );
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = Offset.zero & size;
+    final u = unit;
+    final o = opening(r, u), b = backWall(r, u);
+    final glow = on ? (0.35 + 0.65 * level) : 0.0;
+    Color wall(double shade) => Color.alphaBlend(
+      hue.withValues(alpha: glow * 0.45 * shade),
+      Color.lerp(const Color(0xFF15171C), const Color(0xFF2A2D35), shade)!,
+    );
+
+    // Frame: a faint lit edge, like the box's white rim.
+    final frame = RRect.fromRectAndRadius(r, Radius.circular(u * 0.9));
+    canvas.drawRRect(
+      frame,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(
+              hue.withValues(alpha: glow * 0.25),
+              _white.withValues(alpha: 0.16),
+            ),
+            _white.withValues(alpha: 0.05),
+          ],
+        ).createShader(r),
+    );
+    canvas.save();
+    canvas.clipRRect(RRect.fromRectAndRadius(o, Radius.circular(u * 0.4)));
+    Path quad(Offset a, Offset b2, Offset c, Offset d) => Path()
+      ..moveTo(a.dx, a.dy)
+      ..lineTo(b2.dx, b2.dy)
+      ..lineTo(c.dx, c.dy)
+      ..lineTo(d.dx, d.dy)
+      ..close();
+    // Ceiling (darkest), sides, floor (catches the most light).
+    canvas.drawPath(
+      quad(o.topLeft, o.topRight, b.topRight, b.topLeft),
+      Paint()..color = wall(0.15),
+    );
+    canvas.drawPath(
+      quad(o.topLeft, b.topLeft, b.bottomLeft, o.bottomLeft),
+      Paint()..color = wall(0.45),
+    );
+    canvas.drawPath(
+      quad(o.topRight, o.bottomRight, b.bottomRight, b.topRight),
+      Paint()..color = wall(0.35),
+    );
+    canvas.drawPath(
+      quad(b.bottomLeft, b.bottomRight, o.bottomRight, o.bottomLeft),
+      Paint()..color = wall(0.75),
+    );
+    // Back wall, with the bulb's pool of light.
+    canvas.drawRect(b, Paint()..color = wall(0.55));
+    if (on) {
+      final c = Offset(b.left + b.width * 0.62, b.top + b.height * 0.42);
+      final rad = b.longestSide * (0.55 + 0.35 * level);
+      canvas.drawCircle(
+        c,
+        rad,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              Color.lerp(hue, Colors.white, 0.35)!.withValues(alpha: glow),
+              hue.withValues(alpha: 0.4 * glow),
+              hue.withValues(alpha: 0),
+            ],
+            stops: const [0, 0.45, 1],
+          ).createShader(Rect.fromCircle(center: c, radius: rad)),
+      );
+    }
+    // Soft shade where the walls meet the back.
+    canvas.drawRect(
+      b,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = Colors.black.withValues(alpha: 0.25),
+    );
+    canvas.restore();
+    if (offline) {
+      canvas.drawRRect(
+        frame.deflate(0.6),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = _red.withValues(alpha: 0.5),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LightBoxPainter old) =>
+      old.hue != hue ||
+      old.on != on ||
+      old.level != level ||
+      old.offline != offline ||
+      old.unit != unit;
+}
+
+/// A rocker wall switch: up and lit in the light's colour when on, down
+/// and dark when off. A spinner sits on it while a command is out.
+class _WallSwitch extends StatelessWidget {
+  const _WallSwitch({required this.on, required this.hue, required this.busy});
+  final bool on;
+  final Color hue;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, c) {
+      final w = c.maxWidth, h = c.maxHeight;
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(w * 0.14),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              _white.withValues(alpha: 0.22),
+              _white.withValues(alpha: 0.08),
+            ],
+          ),
+          border: Border.all(color: _white.withValues(alpha: 0.18)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: w * 0.2,
+              offset: Offset(w * 0.05, w * 0.08),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Container(
+          width: w * 0.42,
+          height: h * 0.52,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(w * 0.08),
+          ),
+          padding: EdgeInsets.all(w * 0.04),
+          child: busy
+              ? Center(
+                  child: SizedBox.square(
+                    dimension: w * 0.3,
+                    child: CircularProgressIndicator(
+                      strokeWidth: w * 0.05,
+                      color: _white,
+                    ),
+                  ),
+                )
+              : AnimatedAlign(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  alignment: on ? Alignment.topCenter : Alignment.bottomCenter,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    height: h * 0.27,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(w * 0.06),
+                      color: on ? hue : _white.withValues(alpha: 0.55),
+                      boxShadow: on
+                          ? [
+                              BoxShadow(
+                                color: hue.withValues(alpha: 0.7),
+                                blurRadius: w * 0.25,
+                              ),
+                            ]
+                          : null,
+                    ),
+                  ),
+                ),
+        ),
+      );
+    },
+  );
+}
+
 /// A card's 1.2 px border, [color] at the top-left corner fading to a
 /// whisper of white at the bottom-right.
 class _EdgePainter extends CustomPainter {
@@ -2769,7 +3368,12 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
     setState(() => _busy.add(light));
     try {
       await action();
-      _states[light] = expected;
+      // Keep the colour temperature through on / off / dimming.
+      _states[light] = LightState(
+        expected.on,
+        expected.brightness,
+        expected.kelvin ?? _states[light]?.kelvin,
+      );
       _offline.remove(light);
     } catch (_) {
       _offline.add(light);
@@ -2922,17 +3526,18 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
           ),
           // Switches three to a row; with more than three, fans get a
           // row of their own.
-          for (final group in widget.switches.length <= 3
-              ? [
-                  [
-                    ...widget.switches.where((s) => s.isFan),
-                    ...widget.switches.where((s) => !s.isFan),
-                  ],
-                ]
-              : [
-                  for (final fans in [true, false])
-                    [...widget.switches.where((s) => s.isFan == fans)],
-                ])
+          for (final group
+              in widget.switches.length <= 3
+                  ? [
+                      [
+                        ...widget.switches.where((s) => s.isFan),
+                        ...widget.switches.where((s) => !s.isFan),
+                      ],
+                    ]
+                  : [
+                      for (final fans in [true, false])
+                        [...widget.switches.where((s) => s.isFan == fans)],
+                    ])
             if (group.isNotEmpty) ...[
               SizedBox(height: gap),
               Wrap(
@@ -2953,7 +3558,9 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                 for (final ac in widget.acs)
                   AcPanel(
                     ac: ac,
-                    width: tile,
+                    // Alone in its room, the AC gets the whole width.
+                    wide: widget.acs.length == 1,
+                    width: widget.acs.length == 1 ? widget.width : tile,
                     unit: u,
                     night: widget.night,
                     nudge: _acNudge,
@@ -2981,156 +3588,90 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
     );
   }
 
-  /// A square tile: one big power button carrying the bulb icon, the name
-  /// and its state ("Warm Glow · 50%"), and for a dimmable light a
-  /// segmented 1 / 25 / 50 / 100% bar under it. The look follows a mock-up
-  /// the user sent (Oct 2026), stacked to fit a narrow tile.
+  /// A light as a lightbox (from a Rive design the user picked, Oct 2026 —
+  /// "Lightbox" by Gary Simon, CC BY 4.0): a shadow box holding a wall
+  /// switch and a bulb. The switch — or anywhere in the box — turns it on
+  /// or off; on, the bulb lights and its glow fills the box, brighter with
+  /// the level. A bulb with a colour temperature (the Yeelight) gets a
+  /// warm-to-cool strip across the top of the box. Under it the name and
+  /// state, then the 1 / 25 / 50 / 100% presets.
   Widget _tile(Light light, double size) {
     final u = widget.unit;
-    final hue = _hue(_glowFor(light), widget.night);
     final state = _states[light];
     final on = state?.on == true;
     final level = state?.brightness;
     final offline = _offline.contains(light);
     final busy = _busy.contains(light);
-    final tone = _glowFor(light) == _cool ? 'Icy White' : 'Warm Glow';
+    final kelvin = state?.kelvin;
+    final glow = light.hasKelvin && kelvin != null
+        ? _kelvinColor(kelvin)
+        : _glowFor(light);
+    final hue = _hue(glow, widget.night);
     final status = offline
         ? 'Offline'
         : state == null
         ? 'Connecting…'
         : on
-        ? (light.dimmable && level != null ? '$tone · $level%' : '$tone · On')
-        : 'Off · $tone';
-    // On, the button is the light's colour and everything on it is dark.
-    final ink = on ? Colors.black.withValues(alpha: 0.85) : _white;
-    final r = BorderRadius.circular(u * 1.25);
+        ? (light.dimmable && level != null ? 'On · $level%' : 'On')
+        : 'Off';
 
-    Widget chip(double side, double radius, Widget child) => Container(
-      width: side,
-      height: side,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: on
-            ? Colors.black.withValues(alpha: 0.12)
-            : _white.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(radius),
-      ),
-      child: child,
-    );
-
-    final power = GestureDetector(
+    final box = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: busy
+      onTap: busy || state == null
           ? null
-          : () =>
-                _run(light, () => light.setPower(!on), LightState(!on, level)),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 350),
-        padding: EdgeInsets.all(u * 0.85),
-        decoration: BoxDecoration(
-          borderRadius: r,
-          gradient: on
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    hue,
-                    Color.lerp(hue, const Color(0xFFFF6A1A), 0.35)!,
-                  ],
-                )
-              : null,
-          color: on ? null : _white.withValues(alpha: 0.05),
-          border: Border.all(
-            color: offline
-                ? _red.withValues(alpha: 0.4)
-                : on
-                ? _white.withValues(alpha: 0.25)
-                : _surfaceEdge,
-          ),
-          boxShadow: on
-              ? [
-                  BoxShadow(
-                    color: hue.withValues(alpha: 0.35),
-                    blurRadius: u * 1.2,
-                  ),
-                ]
-              : null,
+          : () => _run(
+              light,
+              () => light.setPower(!on),
+              LightState(!on, level, state.kelvin),
+            ),
+      // Press and hold a bulb with a colour temperature for its sheet.
+      onLongPress: light.hasKelvin && state != null
+          ? () => _openKelvin(light)
+          : null,
+      child: CustomPaint(
+        painter: _LightBoxPainter(
+          hue: hue,
+          on: on,
+          level: (level ?? 100) / 100,
+          offline: offline,
+          unit: u,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final inner = _LightBoxPainter.backWall(Offset.zero & c.biggest, u);
+            final bulbH = inner.height * 0.86;
+            return Stack(
               children: [
-                chip(
-                  u * 2.6,
-                  u * 0.8,
-                  Icon(
-                    offline
-                        ? Icons.wifi_off_rounded
-                        : on
-                        ? Icons.lightbulb_rounded
-                        : Icons.lightbulb_outline_rounded,
-                    size: u * 1.5,
-                    color: offline
-                        ? _red
-                        : on
-                        ? ink
-                        : hue.withValues(alpha: 0.75),
-                  ),
+                // The wall switch, left of the bulb.
+                Positioned(
+                  left: inner.left + inner.width * 0.12,
+                  top: inner.center.dy - inner.height * 0.24,
+                  width: inner.height * 0.32,
+                  height: inner.height * 0.48,
+                  child: _WallSwitch(on: on, hue: hue, busy: busy),
                 ),
-                chip(
-                  u * 2.2,
-                  u * 1.1,
-                  busy
-                      ? SizedBox.square(
-                          dimension: u * 1.1,
-                          child: CircularProgressIndicator(
-                            strokeWidth: u * 0.15,
-                            color: ink,
-                          ),
-                        )
-                      : Icon(
-                          Icons.power_settings_new_rounded,
-                          size: u * 1.2,
-                          color: ink.withValues(alpha: on ? 0.85 : 0.55),
-                        ),
-                ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  light.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: ink,
-                    fontSize: u * 1.0,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2,
-                  ),
-                ),
-                Text(
-                  status,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: offline
-                        ? _red
-                        : on
-                        ? ink.withValues(alpha: 0.75)
-                        : _white.withValues(alpha: 0.5),
-                    fontSize: u * 0.72,
-                    fontWeight: FontWeight.w500,
-                    height: 1.3,
+                // The bulb, hanging in the right of the box.
+                Positioned(
+                  left: inner.left + inner.width * 0.62 - bulbH * 0.3,
+                  top: inner.bottom - bulbH - inner.height * 0.02,
+                  width: bulbH * 0.6,
+                  height: bulbH,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 400),
+                    child: Image.asset(
+                      on
+                          ? 'assets/images/bulb_lit.png'
+                          : 'assets/images/bulb_unlit.png',
+                      key: ValueKey(on),
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.medium,
+                      opacity: AlwaysStoppedAnimation(on ? 1 : 0.55),
+                    ),
                   ),
                 ),
               ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -3140,18 +3681,65 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
       on: on,
       unit: u,
       width: size,
-      height: size,
+      height: size * 1.32,
       alert: offline,
+      padding: 0.8,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: power),
+          Expanded(child: box),
+          SizedBox(height: u * 0.5),
+          Text(
+            light.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: _white,
+              fontSize: u * 0.95,
+              fontWeight: FontWeight.w700,
+              height: 1.2,
+            ),
+          ),
+          Text(
+            status,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: offline ? _red : _white.withValues(alpha: on ? 0.75 : 0.5),
+              fontSize: u * 0.7,
+              fontWeight: FontWeight.w500,
+              height: 1.3,
+            ),
+          ),
           if (light.dimmable) ...[
-            SizedBox(height: u * 0.7),
+            SizedBox(height: u * 0.5),
             _presetBar(light, hue, on: on, level: level, busy: busy),
           ],
         ],
       ),
     );
+  }
+
+  /// The colour-temperature sheet (press and hold the White Light's box):
+  /// a big warm → cool slider and the presets, over the room.
+  Future<void> _openKelvin(Light light) async {
+    HapticFeedback.mediumImpact();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      isScrollControlled: true,
+      builder: (_) => _KelvinSheet(
+        light: light,
+        unit: widget.unit,
+        night: widget.night,
+        state: _states[light] ?? const LightState(false),
+        onState: (s) {
+          if (mounted) setState(() => _states[light] = s);
+        },
+      ),
+    );
+    _refresh(light);
   }
 
   /// A Sonoff switch: a small button with a fan or lamp icon, its name and
@@ -3660,9 +4248,14 @@ class AcPanel extends StatefulWidget {
     this.night = false,
     this.nudge,
     this.onOffline,
+    this.wide = false,
   });
 
   final GreeAc ac;
+
+  /// The only AC in its room: one card across the panel — name, mode and
+  /// room temperature left, the dial in the middle, power and − / + right.
+  final bool wide;
 
   /// Told whether the unit stopped (or started) answering — for the
   /// panel's status line.
@@ -3788,7 +4381,7 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
     final u = widget.unit;
     final night = widget.night;
     final width = widget.width;
-    final height = width * 1.3;
+    final height = widget.wide ? u * 10.5 : width * 1.3;
     final state = _state;
     final on = state?.on == true;
     final temp = _pending ?? state?.setTemp ?? 24;
@@ -3798,10 +4391,12 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
     final pad = u * 1.1;
     // The dial takes the middle: what's left of the height between the
     // header (the power circle) and the − / + row, capped by the width.
-    final dialSize = min(
-      width - 2 * pad,
-      (height - 2 * pad - u * 3.2 - u * 2.6 - u * 0.8) / 0.86,
-    );
+    final dialSize = widget.wide
+        ? (height - 2 * pad) / 0.86
+        : min(
+            width - 2 * pad,
+            (height - 2 * pad - u * 3.2 - u * 2.6 - u * 0.8) / 0.86,
+          );
 
     // The badge: the mode while on, otherwise why there isn't one.
     final (badgeText, badgeIcon, badgeColor) = _offline
@@ -3831,6 +4426,155 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
       ),
     );
 
+    final title = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.ac.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: _white.withValues(alpha: on ? 0.95 : 0.7),
+            fontSize: u * 1.05,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: u * 0.3),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: u * 0.5, vertical: u * 0.15),
+          decoration: BoxDecoration(
+            color: badgeColor.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(u),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (badgeIcon != null) ...[
+                Icon(badgeIcon, size: u * 0.8, color: badgeColor),
+                SizedBox(width: u * 0.25),
+              ],
+              Text(
+                badgeText,
+                style: TextStyle(
+                  color: badgeColor,
+                  fontSize: u * 0.7,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    // Power, a circle in the mode's colour while on.
+    final power = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _busy || state == null ? null : _togglePower,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        width: u * 3.2,
+        height: u * 3.2,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: on ? hue : hue.withValues(alpha: 0.06),
+          border: Border.all(color: hue.withValues(alpha: on ? 1 : 0.25)),
+          boxShadow: on
+              ? [BoxShadow(color: hue.withValues(alpha: 0.45), blurRadius: u)]
+              : null,
+        ),
+        child: _busy
+            ? Padding(
+                padding: EdgeInsets.all(u * 0.9),
+                child: CircularProgressIndicator(
+                  strokeWidth: u * 0.15,
+                  color: on ? Colors.black : _white,
+                ),
+              )
+            : Icon(
+                Icons.power_settings_new_rounded,
+                size: u * 1.6,
+                color: on ? Colors.black : hue.withValues(alpha: 0.6),
+              ),
+      ),
+    );
+
+    // The dial: press and hold, then slide up for warmer, down for
+    // cooler — a degree per step, with a tick each. (Plain drags and
+    // taps used to set it, and fired by accident.)
+    final dial = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPressStart: (_) {
+        HapticFeedback.selectionClick();
+        _dialFrom = temp;
+      },
+      onLongPressMoveUpdate: (d) {
+        final from = _dialFrom;
+        if (from == null) return;
+        final t = (from - d.offsetFromOrigin.dy / (u * 1.4)).round();
+        if (t.clamp(acMinTemp, acMaxTemp) != temp) {
+          HapticFeedback.selectionClick();
+        }
+        _dial(t);
+      },
+      onLongPressEnd: (_) => _dialFrom = null,
+      child: SizedBox(
+        width: dialSize,
+        height: dialSize * 0.86,
+        child: CustomPaint(
+          painter: _DialPainter(
+            value: (temp - acMinTemp) / (acMaxTemp - acMinTemp),
+            // Cold to hot along the arc, so its colour is the setting.
+            colors: [
+              for (final c in _dialStops)
+                on ? _hue(c, night) : _white.withValues(alpha: 0.3),
+            ],
+            unit: u * 0.5,
+          ),
+          // The box is cut off below the arc, so its middle sits above
+          // the circle's; pad the top to centre the readout in the ring.
+          child: Padding(
+            padding: EdgeInsets.only(top: dialSize * 0.14),
+            child: Center(
+              child: Text(
+                '$temp°',
+                style: TextStyle(
+                  color: _white.withValues(alpha: on ? 1 : 0.5),
+                  fontSize: u * 2.4,
+                  fontWeight: FontWeight.w300,
+                  letterSpacing: -u * 0.05,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final roomTemp = room == null
+        ? const SizedBox()
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.thermostat_rounded,
+                size: u * 0.9,
+                color: _white.withValues(alpha: 0.5),
+              ),
+              Text(
+                widget.wide ? 'Room $room°' : '$room°',
+                style: TextStyle(
+                  color: _white.withValues(alpha: 0.6),
+                  fontSize: u * 0.8,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          );
+
+    final minus = roundButton(Icons.remove_rounded, () => _dial(temp - 1));
+    final plus = roundButton(Icons.add_rounded, () => _dial(temp + 1));
+
     return _GlowCard(
       hue: hue,
       on: on,
@@ -3838,179 +4582,51 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
       width: width,
       height: height,
       alert: _offline,
-      child: Column(
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
+      child: widget.wide
+          ? Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [title, const Spacer(), roomTemp],
+                  ),
+                ),
+                SizedBox(width: u * 0.6),
+                dial,
+                SizedBox(width: u * 0.6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      power,
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [minus, SizedBox(width: u * 0.6), plus],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [Expanded(child: title), power],
+                ),
+                const Spacer(),
+                dial,
+                const Spacer(),
+                Row(
                   children: [
-                    Text(
-                      widget.ac.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: _white.withValues(alpha: on ? 0.95 : 0.7),
-                        fontSize: u * 1.05,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: u * 0.3),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: u * 0.5,
-                        vertical: u * 0.15,
-                      ),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(u),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (badgeIcon != null) ...[
-                            Icon(badgeIcon, size: u * 0.8, color: badgeColor),
-                            SizedBox(width: u * 0.25),
-                          ],
-                          Text(
-                            badgeText,
-                            style: TextStyle(
-                              color: badgeColor,
-                              fontSize: u * 0.7,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    minus,
+                    Expanded(child: Center(child: roomTemp)),
+                    plus,
                   ],
                 ),
-              ),
-              // Power, a circle in the mode's colour while on.
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _busy || state == null ? null : _togglePower,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: u * 3.2,
-                  height: u * 3.2,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: on ? hue : hue.withValues(alpha: 0.06),
-                    border: Border.all(
-                      color: hue.withValues(alpha: on ? 1 : 0.25),
-                    ),
-                    boxShadow: on
-                        ? [
-                            BoxShadow(
-                              color: hue.withValues(alpha: 0.45),
-                              blurRadius: u,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: _busy
-                      ? Padding(
-                          padding: EdgeInsets.all(u * 0.9),
-                          child: CircularProgressIndicator(
-                            strokeWidth: u * 0.15,
-                            color: on ? Colors.black : _white,
-                          ),
-                        )
-                      : Icon(
-                          Icons.power_settings_new_rounded,
-                          size: u * 1.6,
-                          color: on ? Colors.black : hue.withValues(alpha: 0.6),
-                        ),
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          // The dial: press and hold, then slide up for warmer, down for
-          // cooler — a degree per step, with a tick each. (Plain drags and
-          // taps used to set it, and fired by accident.)
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onLongPressStart: (_) {
-              HapticFeedback.selectionClick();
-              _dialFrom = temp;
-            },
-            onLongPressMoveUpdate: (d) {
-              final from = _dialFrom;
-              if (from == null) return;
-              final t = (from - d.offsetFromOrigin.dy / (u * 1.4)).round();
-              if (t.clamp(acMinTemp, acMaxTemp) != temp) {
-                HapticFeedback.selectionClick();
-              }
-              _dial(t);
-            },
-            onLongPressEnd: (_) => _dialFrom = null,
-            child: SizedBox(
-              width: dialSize,
-              height: dialSize * 0.86,
-              child: CustomPaint(
-                painter: _DialPainter(
-                  value: (temp - acMinTemp) / (acMaxTemp - acMinTemp),
-                  // Cold to hot along the arc, so its colour is the setting.
-                  colors: [
-                    for (final c in _dialStops)
-                      on ? _hue(c, night) : _white.withValues(alpha: 0.3),
-                  ],
-                  unit: u * 0.5,
-                ),
-                // The box is cut off below the arc, so its middle sits above
-                // the circle's; pad the top to centre the readout in the ring.
-                child: Padding(
-                  padding: EdgeInsets.only(top: dialSize * 0.14),
-                  child: Center(
-                    child: Text(
-                      '$temp°',
-                      style: TextStyle(
-                        color: _white.withValues(alpha: on ? 1 : 0.5),
-                        fontSize: u * 2.4,
-                        fontWeight: FontWeight.w300,
-                        letterSpacing: -u * 0.05,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              ],
             ),
-          ),
-          const Spacer(),
-          Row(
-            children: [
-              roundButton(Icons.remove_rounded, () => _dial(temp - 1)),
-              Expanded(
-                child: room == null
-                    ? const SizedBox()
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.thermostat_rounded,
-                            size: u * 0.9,
-                            color: _white.withValues(alpha: 0.5),
-                          ),
-                          Text(
-                            '$room°',
-                            style: TextStyle(
-                              color: _white.withValues(alpha: 0.6),
-                              fontSize: u * 0.8,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-              roundButton(Icons.add_rounded, () => _dial(temp + 1)),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
