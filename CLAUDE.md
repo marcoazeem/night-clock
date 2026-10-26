@@ -161,8 +161,9 @@ app builds fine but the lights panel silently disappears.
   portrait and to its right in landscape, laid out at the portrait width
   (`26 * unit`) either way. One page, no swiping — but the panel scrolls
   vertically once it outgrows its room (the user said scrolling is fine
-  when they added a second AC), though the user wants the current set
-  (2 lights, 2 ACs, TV) to fit unscrolled. Standing, its max height leaves
+  when they added a second AC), though the user wanted the old set
+  (2 lights, 2 ACs, TV) to fit unscrolled — with the bedroom's three
+  switch tiles the TV card now needs a scroll (Oct 2026). Standing, its max height leaves
   the clock `0.4 * width`; today everything fits with room to spare.
   (The weather shows just icon + temperature — the user had the low – high
   range removed, on both apps.)
@@ -194,8 +195,9 @@ app builds fine but the lights panel silently disappears.
   device,device; Other Room="`, devices by their config names. The user's
   house: **Haam's Room** (Haam's AC — the third Gree unit — Haam's TV, the
   TCL Android TV, and a Tapo bulb still to add), **M&M's Room** (Master
-  Bedroom: Warm/White Light, Bedroom + AC 2 ACs, the Hisense "TV"),
-  **Sitting Room** (Beyond TV), **Kitchen** (nothing yet). Without ROOMS
+  Bedroom: Warm/White Light, the Bedroom AC, the Hisense "TV"),
+  **Sitting Room** (AC 2, Beyond TV — AC 2 was in M&M's Room by mistake
+  until 26 Oct 2026), **Kitchen** (nothing yet). Without ROOMS
   it's one room and no home page, as before.
 - `HomePanel` (home page): under the header, a tally of the whole house
   (`_HomeStats` / `NCHomeStats`) — three tiles: lights on, ACs cooling
@@ -230,14 +232,18 @@ app builds fine but the lights panel silently disappears.
 
 - The user plans Sonoff wall switches: Sitting Room — Fan 1, Fan 2,
   Ceiling 1–4, Wall 1, Wall 2; Kitchen — Kitchen Fan, Cabinet Lights,
-  Ceiling Light, Hanging Light. Not installed yet, so they're buttons
+  Ceiling Light, Hanging Light; M&M's Room and Haam's Room — a fan and
+  Ceiling 1, Ceiling 2 each (config names "M&M's Fan", "Haam's Ceiling 1"
+  …: names are unique house-wide, and a tile drops its room's first word,
+  so it reads "Ceiling 1"). Not installed yet, so they're buttons
   only: `SONOFF_SWITCHES` in lights.json (names, each may get `=IP`
   later), placed by ROOMS like any device. `SonoffSwitch` (lights.dart) /
   `NCSonoffSwitch` (Devices.m) has `isSetUp` NO and stub `isOn`/`setPower`
   — write the protocol there (eWeLink LAN mode, or DIY mode's HTTP API on
   port 8081) and flip `isSetUp`.
-- UI (`_switchTile` / `NCSwitchTile`): small tiles three to a row, fans
-  on their own row first (mint `_fanGreen`), lights after (amber), each
+- UI (`_switchTile` / `NCSwitchTile`): small tiles three to a row, right
+  under the light squares; a room with up to three shares one row (fan
+  first), a bigger set gives fans their own row first (mint `_fanGreen`), lights after (amber), each
   greyed with "Not set up". Icons are **Hugeicons** (the user asked;
   `hugeicons` package, stroke rounded), picked by name: Fan01, LampCeiling,
   Lamp02 (hanging), LampWallDown (wall), Cabinet01, Bulb. The iPad's

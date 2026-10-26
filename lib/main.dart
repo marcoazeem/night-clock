@@ -2920,16 +2920,27 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
             runSpacing: gap,
             children: [for (final light in widget.lights) _tile(light, tile)],
           ),
-          for (final fans in [true, false])
-            if (widget.switches.any((s) => s.isFan == fans)) ...[
+          // Switches three to a row; with more than three, fans get a
+          // row of their own.
+          for (final group in widget.switches.length <= 3
+              ? [
+                  [
+                    ...widget.switches.where((s) => s.isFan),
+                    ...widget.switches.where((s) => !s.isFan),
+                  ],
+                ]
+              : [
+                  for (final fans in [true, false])
+                    [...widget.switches.where((s) => s.isFan == fans)],
+                ])
+            if (group.isNotEmpty) ...[
               SizedBox(height: gap),
               Wrap(
                 spacing: gap,
                 runSpacing: gap,
                 children: [
-                  for (final s in widget.switches)
-                    if (s.isFan == fans)
-                      _switchTile(s, (widget.width - gap * 2) / 3),
+                  for (final s in group)
+                    _switchTile(s, (widget.width - gap * 2) / 3),
                 ],
               ),
             ],
@@ -3146,6 +3157,15 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
   /// A Sonoff switch: a small button with a fan or lamp icon, its name and
   /// state. Not wired up yet — every one reads "Not set up" and does
   /// nothing when tapped.
+  /// A switch's name without its room's prefix: "Haam's Ceiling 1" reads
+  /// "Ceiling 1" in Haam's Room, "Kitchen Fan" reads "Fan" in the Kitchen.
+  /// (Names are unique across the house; the prefix just repeats the room.)
+  String _shortName(String name) {
+    final room = (widget.title ?? '').split(' ').first.toLowerCase();
+    if (room.isEmpty || !name.toLowerCase().startsWith('$room ')) return name;
+    return name.substring(room.length + 1);
+  }
+
   Widget _switchTile(SonoffSwitch sw, double size) {
     final u = widget.unit;
     final n = sw.name.toLowerCase();
@@ -3199,7 +3219,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  sw.name,
+                  _shortName(sw.name),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
