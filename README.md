@@ -29,6 +29,11 @@ charging, without giving up the clock.
   wall switch. Tap the box to switch it; on, the bulb lights and its glow
   fills the box, brighter with the level. A bulb with a colour
   temperature (a Yeelight) gets a warm → cool strip across the top.
+- **Energy estimate** on the home page: the draw right now from what's
+  switched on (ACs by size and load, bulbs by level, TVs), today's and
+  this billing period's kWh, the projected bill on STELCO's domestic
+  tariff, and a line graph of your past bills (`BILLS`, `AC_BTU`,
+  `BILL_DAY` in `lights.json`). It's an estimate — nothing is metered.
 - **Frosted-glass cards**, each in its device's own colour — amber and
   icy white for the bulbs, violet for the TV, and the AC's colour follows
   its mode (cyan cooling, orange heating).

@@ -233,6 +233,37 @@ app builds fine but the lights panel silently disappears.
   `NCStatusLine`), Wi-Fi read from the device itself every 30 s ("No
   Wi-Fi" in red when off), "All systems nominal" on the right. Only the room on screen
   polls. GN/GM appear only in a room holding their devices (`_hasScenes`).
+- **Energy card (27 Oct 2026, home page of both apps)**: an *estimate*
+  — nothing is metered. `lib/energy.dart` / `ipad/src/Energy.m`:
+  `EnergyTracker` / `NCEnergyTracker` polls every device every 15 s
+  whatever's on screen (the home page's three counts read it too — the
+  house is polled once). Draw: an AC is ~1.1 kW per 12,000 BTU (`AC_BTU`:
+  Bedroom and Haam's 12k, AC 2 in the Sitting Room 24k) × 45–100% by how
+  far the room is from the setpoint, fan mode 45 W; a bulb 9 W × level;
+  a TV 100 W, a box 12 W; plus `ENERGY_BASELINE_W` (400) for everything
+  unseen. kWh add up per day and per billing period (from `BILL_DAY`, 14 —
+  the new apartment's bills come mid-month),
+  saved in prefs ('energy'); a gap counts the last draw for 2 h, then the
+  baseline. The first run fills the period's untracked start at last
+  year's pace. Projection blends the tracked pace with last year's over
+  the first week. `billMvr` is STELCO's domestic tariff (100-unit bands
+  stretched by days/30: 1.25, 1.50×3, 2.66, 3.20, then 3.83; −0.12/kWh
+  fuel discount; +150 WAMCO) — matches all 10 regular bills to ≤ 6 laari.
+  `BILLS` ("2026-07-15=410/12, …") holds the user's bills, in gitignored
+  lights.json. They're the **new apartment's** (from July 2026; the first
+  covers only 12 days) — from `stelco_new_apartment_energy_values.md`.
+  `stelco_energy_consumption_values.md` is the *old* apartment's (another
+  account): the user gave it by mistake first; don't use it. Both files
+  (account numbers, meter readings) are gitignored (`/stelco*`) — never
+  commit them. With no bill from a year earlier, the pace is all bills'
+  average. Card: kW now, Today / This bill kWh / Projected MVR, a line
+  graph of **kWh a day** per bill (bills run 12–33 days, so per-bill kWh
+  would dip falsely; smooth 2 px line + soft fill, a round ~3-line scale,
+  bill months along the foot, broken across gaps > 45 days; the
+  projection a glowing hollow point "now", dashed on from the last bill;
+  touch/drag for "14 Oct bill · 34.8 kWh/day · 1,045 kWh · MVR 2,890" —
+  the user asked for a line graph), and the draw split ACs / Lights /
+  Screens / Other.
 - Locked rooms: `ROOM_PINS` in lights.json (`"Room=1234"`; the
   code stays out of the public repos). Opening one from the home page shows
   a passcode pad in the panel's place (`PinPad` / `NCPinView`): dots and a

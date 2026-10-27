@@ -17,6 +17,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'adb.dart';
 import 'gree.dart';
 import 'lights.dart';
+import 'energy.dart';
 import 'tv.dart';
 import 'weather.dart';
 
@@ -128,7 +129,9 @@ const _presets = [1, 25, 50, 100];
 int? _nearestPreset(int? level) => level == null
     ? null
     : _presets.indexOf(
-        _presets.reduce((a, b) => (a - level).abs() <= (b - level).abs() ? a : b),
+        _presets.reduce(
+          (a, b) => (a - level).abs() <= (b - level).abs() ? a : b,
+        ),
       );
 
 Widget _capWidth(double width, Widget child) {
@@ -188,6 +191,10 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     configuredBoxes(),
     configuredSwitches(),
   );
+
+  /// The house's energy estimate, kept all the time (the home page shows
+  /// it); also the home page's counts of what's on.
+  late final _energy = EnergyTracker(_rooms);
 
   /// The room this device sits in (START_ROOM): it opens there, and goes
   /// back there after [_idleReturn] untouched.
@@ -260,6 +267,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   }
 
   void _startTimers() {
+    _energy.start();
     _scheduleTick();
     _refreshWeather();
     _weatherTimer?.cancel();
@@ -282,6 +290,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   }
 
   void _stopTimers() {
+    _energy.stop();
     _tick?.cancel();
     _weatherTimer?.cancel();
     _driftTimer?.cancel();
@@ -487,6 +496,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         key: const ValueKey('home'),
         rooms: _rooms,
         here: _homeRoom,
+        energy: _energy,
         width: width,
         unit: unit,
         night: night,
@@ -1775,7 +1785,8 @@ class _KelvinSheetState extends State<_KelvinSheet> {
 
   void _at(double x, double w) {
     final t = (x / w).clamp(0.0, 1.0);
-    final k = (light.minKelvin + t * (light.maxKelvin - light.minKelvin)).round();
+    final k = (light.minKelvin + t * (light.maxKelvin - light.minKelvin))
+        .round();
     // Snap to 50 K so the readout doesn't flicker through every value.
     setState(() => _kelvin = (k / 50).round() * 50);
   }
@@ -2024,7 +2035,9 @@ class _KelvinSheetState extends State<_KelvinSheet> {
                                   height: u * 2.8,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(u * 1.4),
+                                    borderRadius: BorderRadius.circular(
+                                      u * 1.4,
+                                    ),
                                     color: _on && _nearestPreset(_level) == i
                                         ? hue
                                         : _surface,
@@ -2466,10 +2479,12 @@ class HomePanel extends StatelessWidget {
     required this.width,
     required this.unit,
     required this.onOpen,
+    required this.energy,
     this.night = false,
   });
 
   final List<Room> rooms;
+  final EnergyTracker energy;
 
   /// The room this device sits in, marked "Here".
   final int here;
@@ -2507,7 +2522,23 @@ class HomePanel extends StatelessWidget {
             icon: Icons.home_rounded,
           ),
           SizedBox(height: gap),
-          _HomeStats(rooms: rooms, width: width, unit: u, night: night),
+          ListenableBuilder(
+            listenable: energy,
+            builder: (context, _) => Column(
+              children: [
+                _HomeStats(energy: energy, width: width, unit: u, night: night),
+                if (energy.enabled) ...[
+                  SizedBox(height: gap),
+                  _EnergyCard(
+                    energy: energy,
+                    width: width,
+                    unit: u,
+                    night: night,
+                  ),
+                ],
+              ],
+            ),
+          ),
           SizedBox(height: gap),
           Wrap(
             spacing: gap,
@@ -2693,12 +2724,15 @@ class _StatusBar extends StatelessWidget {
 /// is in. A device that doesn't answer counts as off.
 class _HomeStats extends StatefulWidget {
   const _HomeStats({
-    required this.rooms,
+    required this.energy,
     required this.width,
     required this.unit,
     required this.night,
   });
-  final List<Room> rooms;
+
+  /// The house-wide poll (every device, every 15 s) — shared with the
+  /// energy card, so the house is read once.
+  final EnergyTracker energy;
   final double width;
   final double unit;
   final bool night;
@@ -2707,74 +2741,10 @@ class _HomeStats extends StatefulWidget {
   State<_HomeStats> createState() => _HomeStatsState();
 }
 
-class _HomeStatsState extends State<_HomeStats> with WidgetsBindingObserver {
-  int? _lights, _cooling, _screens;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _start();
-  }
-
-  void _start() {
-    _timer?.cancel();
-    _poll();
-    _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _start();
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
-      _timer?.cancel();
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  /// [check] for each device, at once; how many said yes.
-  static Future<int> _count<T>(
-    Iterable<T> devices,
-    Future<bool> Function(T) check,
-  ) async {
-    final results = await Future.wait([
-      for (final d in devices) check(d).catchError((Object _) => false),
-    ]);
-    return results.where((on) => on).length;
-  }
-
-  Future<void> _poll() async {
-    final rooms = widget.rooms;
-    final lights = {for (final r in rooms) ...r.lights};
-    final acs = {for (final r in rooms) ...r.acs};
-    final tvs = {for (final r in rooms) ...r.tvs};
-    final boxes = {for (final r in rooms) ...r.boxes};
-    final results = await Future.wait([
-      _count(lights, (l) async => (await l.state()).on),
-      // Cooling: on in cool, dry or auto (fan and heat aren't).
-      _count(acs, (a) async {
-        final s = await a.state();
-        return s.on && s.mode <= 2;
-      }),
-      _count(tvs, (t) => t.isOn()),
-      _count(boxes, (b) async => b.isOn(await _loadAdbKey())),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _lights = results[0];
-      _cooling = results[1];
-      _screens = results[2] + results[3];
-    });
-  }
+class _HomeStatsState extends State<_HomeStats> {
+  int? get _lights => widget.energy.lightsOn;
+  int? get _cooling => widget.energy.cooling;
+  int? get _screens => widget.energy.screensOn;
 
   @override
   Widget build(BuildContext context) {
@@ -2840,6 +2810,641 @@ class _HomeStatsState extends State<_HomeStats> with WidgetsBindingObserver {
       ],
     );
   }
+}
+
+// ── Energy (lib/energy.dart) ─────────────────────────────────────────────
+
+/// Polls every device in the house every 15 s, whatever's on screen: for
+/// the home page's counts (lights on, cooling, screens on) and the energy
+/// estimate, which it adds up and saves as it goes.
+class EnergyTracker extends ChangeNotifier {
+  EnergyTracker(this.rooms, {EnergyMeter? meter})
+    : meter =
+          meter ??
+          EnergyMeter(bills: configuredBills(), billDay: configuredBillDay());
+
+  final List<Room> rooms;
+  final EnergyMeter meter;
+  final _btu = configuredAcBtu();
+  final _baseline = configuredBaseline();
+  SharedPreferences? _prefs;
+  Timer? _timer;
+  bool _loaded = false;
+
+  int? lightsOn, cooling, screensOn;
+  Draw? draw;
+  DateTime now = DateTime.now();
+
+  /// The card shows only with bills to go on.
+  bool get enabled => meter.bills.isNotEmpty;
+
+  void start() {
+    _timer?.cancel();
+    _poll();
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
+  }
+
+  void stop() => _timer?.cancel();
+
+  static Future<T?> _try<T>(Future<T> f) =>
+      f.then<T?>((v) => v).catchError((Object _) => null);
+
+  Future<void> _poll() async {
+    if (!_loaded) {
+      _loaded = true;
+      try {
+        _prefs = await SharedPreferences.getInstance();
+        meter.load(_prefs!.getString('energy'));
+      } catch (_) {}
+    }
+    final lights = {for (final r in rooms) ...r.lights}.toList();
+    final acs = {for (final r in rooms) ...r.acs}.toList();
+    final tvs = {for (final r in rooms) ...r.tvs}.toList();
+    final boxes = {for (final r in rooms) ...r.boxes}.toList();
+    final key = boxes.isEmpty ? null : await _try(_loadAdbKey());
+    final ls = await Future.wait([for (final l in lights) _try(l.state())]);
+    final as = await Future.wait([for (final a in acs) _try(a.state())]);
+    final ts = await Future.wait([for (final t in tvs) _try(t.isOn())]);
+    final bs = await Future.wait([
+      for (final b in boxes)
+        key == null ? Future.value(null) : _try(b.isOn(key)),
+    ]);
+    var acW = 0.0, lightW = 0.0;
+    for (final (i, s) in as.indexed) {
+      if (s != null) {
+        acW += acWatts(_btu[acs[i].name.toLowerCase()] ?? 12000, s);
+      }
+    }
+    for (final s in ls) {
+      if (s != null) lightW += lightWatts(s.on, s.brightness);
+    }
+    final tvOn = ts.where((on) => on == true).length;
+    final boxOn = bs.where((on) => on == true).length;
+    lightsOn = ls.where((s) => s?.on == true).length;
+    cooling = as.where((s) => s != null && s.on && s.mode <= 2).length;
+    screensOn = tvOn + boxOn;
+    now = DateTime.now();
+    draw = Draw(
+      acs: acW,
+      lights: lightW,
+      screens: tvOn * tvWatts + boxOn * boxWatts,
+      other: _baseline,
+    );
+    meter.add(now, draw!);
+    _prefs?.setString('energy', meter.toJson());
+    notifyListeners();
+  }
+}
+
+String _kw(double watts) => watts >= 1000
+    ? '${(watts / 1000).toStringAsFixed(1)} kW'
+    : '${watts.round()} W';
+
+String _mvr(double v) {
+  final n = v.round().toString();
+  return n.length > 3
+      ? '${n.substring(0, n.length - 3)},${n.substring(n.length - 3)}'
+      : n;
+}
+
+const _months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+const _monthNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// The home page's energy card: the draw now and its split, today, this
+/// billing period and its projected bill, and a line graph of the bills.
+class _EnergyCard extends StatefulWidget {
+  const _EnergyCard({
+    required this.energy,
+    required this.width,
+    required this.unit,
+    required this.night,
+  });
+  final EnergyTracker energy;
+  final double width;
+  final double unit;
+  final bool night;
+
+  @override
+  State<_EnergyCard> createState() => _EnergyCardState();
+}
+
+class _EnergyCardState extends State<_EnergyCard> {
+  /// The point picked on the graph (touch and drag), or null.
+  int? _picked;
+  Timer? _unpick;
+
+  @override
+  void dispose() {
+    _unpick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final u = widget.unit;
+    final night = widget.night;
+    final e = widget.energy;
+    final m = e.meter;
+    final now = e.now;
+    final draw = e.draw;
+    final amber = _hue(_warm, night);
+    final projected = draw == null ? null : m.projectedKwh(now);
+    final days = m.periodDays(now);
+    final start = m.periodOf(now).$1;
+
+    // The graph: one point per bill, then this period's projection.
+    final points = [
+      for (final b in m.bills)
+        _EnergyPoint(
+          b.date,
+          b.kwh.toDouble(),
+          billMvr(b.kwh.toDouble(), b.days),
+          false,
+          b.days,
+        ),
+      if (projected != null)
+        _EnergyPoint(
+          m.periodOf(now).$2,
+          projected,
+          billMvr(projected, days),
+          true,
+          days,
+        ),
+    ];
+
+    Widget figure(String label, String value, {String? unit}) => Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: _white.withValues(alpha: 0.55),
+              fontSize: u * 0.65,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: value),
+                if (unit != null)
+                  TextSpan(
+                    text: ' $unit',
+                    style: TextStyle(
+                      fontSize: u * 0.7,
+                      fontWeight: FontWeight.w500,
+                      color: _white.withValues(alpha: 0.6),
+                    ),
+                  ),
+              ],
+            ),
+            maxLines: 1,
+            style: TextStyle(
+              color: _white,
+              fontSize: u * 1.15,
+              fontWeight: FontWeight.w700,
+              height: 1.2,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Widget part(Color c, String label, double w) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: u * 0.5,
+          height: u * 0.5,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _hue(c, night),
+          ),
+        ),
+        SizedBox(width: u * 0.3),
+        Text(
+          '$label ${_kw(w)}',
+          style: TextStyle(
+            color: _white.withValues(alpha: 0.7),
+            fontSize: u * 0.62,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+
+    final picked = _picked == null ? null : points[_picked!];
+
+    return _GlowCard(
+      hue: amber,
+      on: false,
+      unit: u,
+      width: widget.width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: u * 2.4,
+                height: u * 2.4,
+                decoration: BoxDecoration(
+                  color: amber.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(u * 0.7),
+                ),
+                child: Icon(Icons.bolt_rounded, size: u * 1.5, color: amber),
+              ),
+              SizedBox(width: u * 0.7),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ENERGY',
+                      style: TextStyle(
+                        color: _white,
+                        fontSize: u * 0.8,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: u * 0.15,
+                      ),
+                    ),
+                    Text(
+                      'Estimate · bill from ${start.day} ${_monthNames[start.month - 1]}',
+                      style: TextStyle(
+                        color: _white.withValues(alpha: 0.5),
+                        fontSize: u * 0.62,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    draw == null ? '–' : _kw(draw.total),
+                    style: TextStyle(
+                      color: _white,
+                      fontSize: u * 1.5,
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                  ),
+                  Text(
+                    'now',
+                    style: TextStyle(
+                      color: _white.withValues(alpha: 0.5),
+                      fontSize: u * 0.62,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          SizedBox(height: u * 0.9),
+          Row(
+            children: [
+              figure(
+                'Today',
+                draw == null ? '–' : m.dayKwh.toStringAsFixed(1),
+                unit: 'kWh',
+              ),
+              figure(
+                'This bill',
+                draw == null ? '–' : m.periodKwh.round().toString(),
+                unit: 'kWh',
+              ),
+              figure(
+                'Projected',
+                projected == null ? '–' : _mvr(billMvr(projected, days)),
+                unit: 'MVR',
+              ),
+            ],
+          ),
+          SizedBox(height: u * 0.9),
+          // The graph, with the picked point's reading over it.
+          SizedBox(
+            height: u * 1.2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                picked == null
+                    ? 'kWh a day, per bill · touch for details'
+                    : '${picked.projected ? 'This bill (projected)' : '${picked.date.day} ${_monthNames[picked.date.month - 1]} bill'}'
+                          ' · ${picked.perDay.toStringAsFixed(1)} kWh/day'
+                          ' · ${_mvr(picked.kwh)} kWh · MVR ${_mvr(picked.mvr)}',
+                style: TextStyle(
+                  color: _white.withValues(alpha: picked == null ? 0.45 : 0.85),
+                  fontSize: u * 0.62,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, c) {
+              final w = c.maxWidth;
+              void pick(Offset p) {
+                final xs = _EnergyChartPainter.xs(points, w, u);
+                var best = 0;
+                for (var i = 1; i < xs.length; i++) {
+                  if ((xs[i] - p.dx).abs() < (xs[best] - p.dx).abs()) best = i;
+                }
+                _unpick?.cancel();
+                if (best != _picked) HapticFeedback.selectionClick();
+                setState(() => _picked = best);
+              }
+
+              void release() {
+                _unpick?.cancel();
+                _unpick = Timer(const Duration(seconds: 4), () {
+                  if (mounted) setState(() => _picked = null);
+                });
+              }
+
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) => pick(d.localPosition),
+                onTapUp: (_) => release(),
+                onHorizontalDragUpdate: (d) => pick(d.localPosition),
+                onHorizontalDragEnd: (_) => release(),
+                child: CustomPaint(
+                  size: Size(w, u * 7),
+                  painter: _EnergyChartPainter(
+                    points: points,
+                    hue: amber,
+                    unit: u,
+                    picked: _picked,
+                  ),
+                ),
+              );
+            },
+          ),
+          if (draw != null) ...[
+            SizedBox(height: u * 0.7),
+            Wrap(
+              spacing: u * 0.9,
+              runSpacing: u * 0.3,
+              children: [
+                part(_acCool, 'ACs', draw.acs),
+                part(_warm, 'Lights', draw.lights),
+                part(_tvViolet, 'Screens', draw.screens),
+                part(const Color(0xFF9AA0AA), 'Other', draw.other),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EnergyPoint {
+  const _EnergyPoint(this.date, this.kwh, this.mvr, this.projected, this.days);
+
+  /// The bill's date (for the projection, the period's end).
+  final DateTime date;
+  final double kwh, mvr;
+  final bool projected;
+  final int days;
+
+  /// What the graph plots: bills run 12 to 33 days, so kWh a day compares.
+  double get perDay => kwh / max(1, days);
+}
+
+/// A grid step giving about three lines over [range].
+double _niceStep(double range) {
+  for (final s in const [
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    20.0,
+    50.0,
+    100.0,
+    200.0,
+    500.0,
+  ]) {
+    if (range / s <= 3.5) return s;
+  }
+  return 1000;
+}
+
+/// The bills as a line: a smooth 2 px curve over a soft fill, faint grid
+/// lines with their kWh at the left, month initials along the foot. A gap
+/// of more than ~45 days between bills breaks the line (no made-up months);
+/// the projection is a hollow glowing point, joined only if it follows on.
+class _EnergyChartPainter extends CustomPainter {
+  _EnergyChartPainter({
+    required this.points,
+    required this.hue,
+    required this.unit,
+    this.picked,
+  });
+
+  final List<_EnergyPoint> points;
+  final Color hue;
+  final double unit;
+  final int? picked;
+
+  static double left(double u) => u * 2.2;
+
+  /// Each point's x: evenly spaced, with an extra step before a gap.
+  static List<double> xs(List<_EnergyPoint> points, double w, double u) {
+    if (points.isEmpty) return [];
+    final steps = <double>[0];
+    for (var i = 1; i < points.length; i++) {
+      final gap = points[i].date.difference(points[i - 1].date).inDays > 45;
+      steps.add(steps.last + (gap ? 1.6 : 1));
+    }
+    final span = max(1.0, steps.last);
+    final l = left(u) + u * 0.4, r = w - u * 0.6;
+    return [for (final s in steps) l + (r - l) * s / span];
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+    final u = unit;
+    final top = u * 0.6, bottom = size.height - u * 1.2;
+    final hi = points.map((p) => p.perDay).reduce(max);
+    final lo = points.map((p) => p.perDay).reduce(min);
+    // A round scale around the data, about three grid lines.
+    final step = _niceStep(max(1, hi - lo));
+    final yMin = max(0.0, (lo / step).floor() * step);
+    final yMax = max(yMin + step, (hi / step).ceil() * step);
+    double y(double v) => bottom - (v - yMin) / (yMax - yMin) * (bottom - top);
+    final xs = _EnergyChartPainter.xs(points, size.width, u);
+
+    // Grid and its labels, recessive.
+    final grid = Paint()
+      ..color = _white.withValues(alpha: 0.08)
+      ..strokeWidth = 1;
+    for (var v = yMin; v <= yMax + step / 2; v += step) {
+      final gy = y(v);
+      canvas.drawLine(Offset(left(u), gy), Offset(size.width, gy), grid);
+      final tp = TextPainter(
+        text: TextSpan(
+          text: v.round().toString(),
+          style: TextStyle(
+            fontFamily: 'Inter',
+            color: _white.withValues(alpha: 0.4),
+            fontSize: u * 0.55,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(0, gy - tp.height / 2));
+    }
+
+    // Runs of bills without a gap, each a smooth curve over a fill.
+    final runs = <List<int>>[[]];
+    for (var i = 0; i < points.length; i++) {
+      final p = points[i];
+      final breaks =
+          i > 0 &&
+          (p.date.difference(points[i - 1].date).inDays > 45 || p.projected);
+      if (breaks && runs.last.isNotEmpty) runs.add([]);
+      runs.last.add(i);
+    }
+    for (final run in runs) {
+      if (run.isEmpty || points[run.first].projected) continue;
+      final pts = [for (final i in run) Offset(xs[i], y(points[i].perDay))];
+      final line = Path()..moveTo(pts.first.dx, pts.first.dy);
+      for (var i = 1; i < pts.length; i++) {
+        // A gentle curve: control points a third of the way along, level.
+        final a = pts[i - 1], b = pts[i];
+        final dx = (b.dx - a.dx) / 3;
+        line.cubicTo(a.dx + dx, a.dy, b.dx - dx, b.dy, b.dx, b.dy);
+      }
+      final fill = Path.from(line)
+        ..lineTo(pts.last.dx, bottom)
+        ..lineTo(pts.first.dx, bottom)
+        ..close();
+      canvas.drawPath(
+        fill,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [hue.withValues(alpha: 0.28), hue.withValues(alpha: 0)],
+          ).createShader(Rect.fromLTRB(0, top, size.width, bottom)),
+      );
+      canvas.drawPath(
+        line,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = hue,
+      );
+      if (pts.length == 1) {
+        canvas.drawCircle(pts.first, 3, Paint()..color = hue);
+      }
+    }
+
+    // The latest bill and the projection get points (and the projection a
+    // dashed link if it follows straight on); the picked one a guide.
+    for (var i = 0; i < points.length; i++) {
+      final p = points[i];
+      final c = Offset(xs[i], y(p.perDay));
+      if (p.projected) {
+        final prev = i > 0 ? points[i - 1] : null;
+        if (prev != null && p.date.difference(prev.date).inDays <= 45) {
+          final a = Offset(xs[i - 1], y(prev.perDay));
+          final dash = Paint()
+            ..color = hue.withValues(alpha: 0.7)
+            ..strokeWidth = 2;
+          final n = ((c - a).distance / 6).floor();
+          for (var k = 0; k < n; k += 2) {
+            canvas.drawLine(
+              Offset.lerp(a, c, k / n)!,
+              Offset.lerp(a, c, (k + 1) / n)!,
+              dash,
+            );
+          }
+        }
+        canvas.drawCircle(
+          c,
+          u * 0.9,
+          Paint()..color = hue.withValues(alpha: 0.18),
+        );
+        canvas.drawCircle(
+          c,
+          u * 0.38,
+          Paint()..color = const Color(0xFF15171C),
+        );
+        canvas.drawCircle(
+          c,
+          u * 0.38,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..color = hue,
+        );
+      } else if (i == picked) {
+        canvas.drawCircle(
+          c,
+          u * 0.42,
+          Paint()..color = const Color(0xFF15171C),
+        );
+        canvas.drawCircle(c, u * 0.3, Paint()..color = hue);
+      }
+      if (i == picked) {
+        canvas.drawLine(
+          Offset(c.dx, top),
+          Offset(c.dx, bottom),
+          Paint()
+            ..color = _white.withValues(alpha: 0.3)
+            ..strokeWidth = 1,
+        );
+      }
+      // Month initial along the foot ("now" under the projection).
+      final tp = TextPainter(
+        text: TextSpan(
+          // The bill's month (3 letters when there's room).
+          text: p.projected
+              ? 'now'
+              : points.length <= 8
+              ? _monthNames[p.date.month - 1]
+              : _months[p.date.month - 1],
+          style: TextStyle(
+            fontFamily: 'Inter',
+            color: _white.withValues(
+              alpha: i == picked || p.projected ? 0.85 : 0.4,
+            ),
+            fontSize: u * 0.55,
+            fontWeight: p.projected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(c.dx - tp.width / 2, bottom + u * 0.35));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_EnergyChartPainter old) =>
+      old.points.length != points.length ||
+      old.picked != picked ||
+      old.hue != hue ||
+      (points.isNotEmpty && old.points.last.kwh != points.last.kwh);
 }
 
 /// The home page's foot: the same status bar, with Wi-Fi read from the
@@ -4441,7 +5046,10 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
         ),
         SizedBox(height: u * 0.3),
         Container(
-          padding: EdgeInsets.symmetric(horizontal: u * 0.5, vertical: u * 0.15),
+          padding: EdgeInsets.symmetric(
+            horizontal: u * 0.5,
+            vertical: u * 0.15,
+          ),
           decoration: BoxDecoration(
             color: badgeColor.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(u),
@@ -4602,7 +5210,11 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
                       const Spacer(),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
-                        children: [minus, SizedBox(width: u * 0.6), plus],
+                        children: [
+                          minus,
+                          SizedBox(width: u * 0.6),
+                          plus,
+                        ],
                       ),
                     ],
                   ),
@@ -4613,7 +5225,10 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
               children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [Expanded(child: title), power],
+                  children: [
+                    Expanded(child: title),
+                    power,
+                  ],
                 ),
                 const Spacer(),
                 dial,
