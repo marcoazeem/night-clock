@@ -29,6 +29,12 @@ charging, without giving up the clock.
   wall switch. Tap the box to switch it; on, the bulb lights and its glow
   fills the box, brighter with the level. A bulb with a colour
   temperature (a Yeelight) gets a warm → cool strip across the top.
+- **The house** on the home page: a 3D render of the apartment
+  (`assets/images/blueprint.png`, your own — the repo ships without one
+  and shows room cards instead) with a label hung at each room — tap the
+  room or the label to open it — and the rooms glowing with what's on:
+  amber for lights, by their level, a cool halo while an AC cools, violet
+  on a TV that's on. Drag it sideways to turn it; it springs back.
 - **Energy estimate** on the home page: the draw right now from what's
   switched on (ACs by size and load, bulbs by level, TVs), today's and
   this billing period's kWh, the projected bill on STELCO's domestic

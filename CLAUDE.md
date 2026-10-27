@@ -221,13 +221,29 @@ app builds fine but the lights panel silently disappears.
   **Sitting Room** (AC 2, Beyond TV — AC 2 was in M&M's Room by mistake
   until 26 Oct 2026), **Kitchen** (nothing yet). Without ROOMS
   it's one room and no home page, as before.
-- `HomePanel` (home page): under the header, a tally of the whole house
+- `HomePanel` (home page): under the header, **the house** (`_HouseView`,
+  27 Oct 2026 — the user sent an interactive three.js "machine" with
+  stations on a plate and callouts, and asked for "something like this";
+  WebGL in a WebView would heat the phone, so it's the user's own 3D
+  render of the apartment, `assets/images/blueprint.png`, drawn as one
+  texture): each room gets a label hung from a stem at its floor ("01
+  Haam's Room", then "Here · 1 light on · cooling", or its device count
+  when quiet), a glow pooling in the room from the house poll (amber by
+  the brightest light's level, a cyan halo when an AC cools, violet on a
+  TV screen that's on), and the plan is dimmed after dark and red-dimmed
+  in night mode. Tap a room's floor or its label → that room; a sideways
+  drag turns the plan in perspective (`_matrix`, ±17°) and it springs
+  back (up/down still scrolls). `_plots` holds each room's floor polygon,
+  glow centre, stem foot and TV positions as fractions of the image,
+  matched to rooms by words in their names ("haam", "m&m"/"master",
+  "sitting", "kitchen"; a spare bedroom by "bed") — a room with no plot,
+  or every room when the PNG is missing, gets the old 2×2 card
+  (`_cards`). The PNG is gitignored (it's the user's home); a fresh clone
+  shows the cards. Not yet on the iPad. Then a tally of the whole house
   (`_HomeStats` / `NCHomeStats`) — three tiles: lights on, ACs cooling
-  (on in cool/dry/auto), screens on (TVs + boxes) — polling every device
-  every 15 s while the home page is up; no answer counts as off. Then a 2×2 grid of room cards (icon by name — bed /
-  sofa / kitchen — name, subtitle or "2 lights · 1 AC", "Here" on this
-  device's room). Tap a card → that room's `LightsPanel`; the header's
-  house tile goes back home. Each device opens on `START_ROOM` (phone: in
+  (on in cool/dry/auto), screens on (TVs + boxes) — from the house poll
+  (`EnergyTracker`, which also keeps `roomStates` per room for the house);
+  no answer counts as off. The header's house tile goes back home. Each device opens on `START_ROOM` (phone: in
   lights.json, M&M's Room; iPad: build.sh sets M&M's Room too — Haam's iPad sits there) and returns
   there after 2 min untouched (`_idleReturn`). The home page ends in the same status line (`_StatusBar` /
   `NCStatusLine`), Wi-Fi read from the device itself every 30 s ("No

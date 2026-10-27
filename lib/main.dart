@@ -3,6 +3,7 @@ import 'dart:isolate';
 import 'dart:io' show InternetAddressType, NetworkInterface;
 import 'dart:math';
 import 'dart:ui' show ImageFilter, FontFeature;
+import 'dart:ui' as ui show Image;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
@@ -500,6 +501,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         width: width,
         unit: unit,
         night: night,
+        dim: _isDark(_now),
         onOpen: (i) => setState(() {
           if (_rooms[i].pin != null && i != _homeRoom) {
             _asking = i;
@@ -2481,6 +2483,8 @@ class HomePanel extends StatelessWidget {
     required this.onOpen,
     required this.energy,
     this.night = false,
+    this.dim = false,
+    this.blueprint,
   });
 
   final List<Room> rooms;
@@ -2491,6 +2495,12 @@ class HomePanel extends StatelessWidget {
   final double width;
   final double unit;
   final bool night;
+
+  /// After dark: the house render is dimmed.
+  final bool dim;
+
+  /// The house render — for tests; the app's is assets/images/blueprint.png.
+  final ImageProvider? blueprint;
   final ValueChanged<int> onOpen;
 
   static IconData iconFor(String name) {
@@ -2506,7 +2516,6 @@ class HomePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final u = unit;
     final gap = u * 0.8;
-    final tile = (width - gap) / 2;
     final amber = _hue(_warm, night);
     return SizedBox(
       width: width,
@@ -2520,6 +2529,27 @@ class HomePanel extends StatelessWidget {
             title: 'HOME',
             subtitle: '${rooms.length} rooms',
             icon: Icons.home_rounded,
+          ),
+          SizedBox(height: gap),
+          ListenableBuilder(
+            listenable: energy,
+            builder: (context, _) => _HouseView(
+              rooms: rooms,
+              here: here,
+              states: energy.roomStates,
+              width: width,
+              unit: u,
+              night: night,
+              dim: dim,
+              onOpen: onOpen,
+              image:
+                  blueprint ??
+                  const ResizeImage(
+                    AssetImage('assets/images/blueprint.png'),
+                    width: 900,
+                  ),
+              cards: (indices) => _cards(indices, amber),
+            ),
           ),
           SizedBox(height: gap),
           ListenableBuilder(
@@ -2540,103 +2570,769 @@ class HomePanel extends StatelessWidget {
             ),
           ),
           SizedBox(height: gap),
-          Wrap(
-            spacing: gap,
-            runSpacing: gap,
-            children: [
-              for (final (i, room) in rooms.indexed)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onOpen(i),
-                  child: _GlowCard(
-                    hue: amber,
-                    on: false,
-                    unit: u,
-                    width: tile,
-                    height: u * 9,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: u * 2.6,
-                              height: u * 2.6,
-                              decoration: BoxDecoration(
-                                color: _white.withValues(alpha: 0.07),
-                                borderRadius: BorderRadius.circular(u * 0.8),
-                              ),
-                              child: Icon(
-                                iconFor(room.name),
-                                size: u * 1.5,
-                                color: room.isEmpty
-                                    ? _white.withValues(alpha: 0.4)
-                                    : amber,
-                              ),
-                            ),
-                            const Spacer(),
-                            if (room.pin != null && i != here)
-                              Icon(
-                                Icons.lock_rounded,
-                                size: u * 1.1,
-                                color: _white.withValues(alpha: 0.45),
-                              ),
-                            if (i == here)
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: u * 0.6,
-                                  vertical: u * 0.2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: amber.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(u),
-                                ),
-                                child: Text(
-                                  'Here',
-                                  style: TextStyle(
-                                    color: amber,
-                                    fontSize: u * 0.65,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const Spacer(),
-                        Text(
-                          room.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: _white,
-                            fontSize: u * 1.0,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                          ),
-                        ),
-                        Text(
-                          room.subtitle ?? room.summary,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: _white.withValues(alpha: 0.5),
-                            fontSize: u * 0.72,
-                            fontWeight: FontWeight.w500,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          SizedBox(height: gap),
           _HomeStatus(unit: u, night: night),
         ],
       ),
     );
   }
+
+  /// The rooms in [indices] as cards, two to a row: the home page before
+  /// the house render, and still what a room gets when it has no place on
+  /// the render — or every room, when the render is missing.
+  Widget _cards(List<int> indices, Color amber) {
+    final u = unit;
+    final gap = u * 0.8;
+    final tile = (width - gap) / 2;
+    return Wrap(
+      spacing: gap,
+      runSpacing: gap,
+      children: [
+        for (final i in indices)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onOpen(i),
+            child: _GlowCard(
+              hue: amber,
+              on: false,
+              unit: u,
+              width: tile,
+              height: u * 9,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: u * 2.6,
+                        height: u * 2.6,
+                        decoration: BoxDecoration(
+                          color: _white.withValues(alpha: 0.07),
+                          borderRadius: BorderRadius.circular(u * 0.8),
+                        ),
+                        child: Icon(
+                          iconFor(rooms[i].name),
+                          size: u * 1.5,
+                          color: rooms[i].isEmpty
+                              ? _white.withValues(alpha: 0.4)
+                              : amber,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (rooms[i].pin != null && i != here)
+                        Icon(
+                          Icons.lock_rounded,
+                          size: u * 1.1,
+                          color: _white.withValues(alpha: 0.45),
+                        ),
+                      if (i == here)
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: u * 0.6,
+                            vertical: u * 0.2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: amber.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(u),
+                          ),
+                          child: Text(
+                            'Here',
+                            style: TextStyle(
+                              color: amber,
+                              fontSize: u * 0.65,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    rooms[i].name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _white,
+                      fontSize: u * 1.0,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                  ),
+                  Text(
+                    rooms[i].subtitle ?? rooms[i].summary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _white.withValues(alpha: 0.5),
+                      fontSize: u * 0.72,
+                      fontWeight: FontWeight.w500,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ── House (home page) ────────────────────────────────────────────────────
+
+/// What's on in one room right now, from the house-wide poll.
+class RoomState {
+  const RoomState({
+    this.lightsOn = 0,
+    this.level,
+    this.cooling = 0,
+    this.screensOn = 0,
+  });
+  final int lightsOn;
+
+  /// The brightest lit light's level, 1–100.
+  final int? level;
+  final int cooling;
+  final int screensOn;
+
+  bool get quiet => lightsOn == 0 && cooling == 0 && screensOn == 0;
+
+  /// "1 light on · cooling · TV on", or null when nothing is.
+  String? get line {
+    final parts = [
+      if (lightsOn > 0) '$lightsOn light${lightsOn == 1 ? '' : 's'} on',
+      if (cooling > 0) 'cooling',
+      if (screensOn > 0) '${screensOn == 1 ? 'TV' : '$screensOn TVs'} on',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+}
+
+/// Where a room sits on the render (assets/images/blueprint.png, the
+/// user's apartment), in fractions of the image: the floor to tap, where
+/// its glow pools, where its label's stem lands, and its TV screens.
+class _Plot {
+  const _Plot({
+    required this.keys,
+    required this.floor,
+    required this.centre,
+    required this.foot,
+    this.generic = const [],
+    this.right = false,
+    this.screens = const [],
+  });
+
+  /// Words in a room's name (or subtitle) that put it here; [generic] ones
+  /// ("bed") only place a room nothing else has claimed.
+  final List<String> keys;
+  final List<String> generic;
+  final List<Offset> floor;
+  final Offset centre;
+  final Offset foot;
+
+  /// The label hangs to the left of its stem (else to the right).
+  final bool right;
+  final List<Offset> screens;
+
+  bool contains(Offset p) {
+    var inside = false;
+    for (var i = 0, j = floor.length - 1; i < floor.length; j = i++) {
+      final a = floor[i], b = floor[j];
+      if ((a.dy > p.dy) != (b.dy > p.dy) &&
+          p.dx < (b.dx - a.dx) * (p.dy - a.dy) / (b.dy - a.dy) + a.dx) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+}
+
+/// The render's width over its height.
+const _blueprintAspect = 1377 / 1008;
+
+const _plots = [
+  // The smaller bedroom, top left.
+  _Plot(
+    keys: ['haam'],
+    generic: ['bed'],
+    floor: [
+      Offset(0.109, 0.030),
+      Offset(0.418, 0.022),
+      Offset(0.415, 0.335),
+      Offset(0.098, 0.345),
+    ],
+    centre: Offset(0.26, 0.19),
+    foot: Offset(0.21, 0.29),
+    screens: [Offset(0.14, 0.21)],
+  ),
+  // The master bedroom, top right.
+  _Plot(
+    keys: ['m&m', 'master'],
+    generic: ['bed'],
+    floor: [
+      Offset(0.633, 0.040),
+      Offset(0.975, 0.030),
+      Offset(0.978, 0.560),
+      Offset(0.633, 0.545),
+    ],
+    centre: Offset(0.80, 0.30),
+    foot: Offset(0.76, 0.50),
+    right: true,
+    screens: [Offset(0.69, 0.27)],
+  ),
+  // The sitting room, bottom left, with the hall.
+  _Plot(
+    keys: ['sitting', 'living', 'lounge'],
+    floor: [
+      Offset(0.030, 0.345),
+      Offset(0.625, 0.335),
+      Offset(0.630, 0.560),
+      Offset(0.520, 0.780),
+      Offset(0.280, 0.880),
+      Offset(0.010, 0.740),
+    ],
+    centre: Offset(0.33, 0.60),
+    foot: Offset(0.19, 0.74),
+    screens: [Offset(0.13, 0.56)],
+  ),
+  // The kitchen, bottom right.
+  _Plot(
+    keys: ['kitchen'],
+    floor: [
+      Offset(0.640, 0.560),
+      Offset(0.975, 0.560),
+      Offset(0.970, 0.870),
+      Offset(0.640, 0.850),
+    ],
+    centre: Offset(0.80, 0.72),
+    foot: Offset(0.80, 0.78),
+    right: true,
+  ),
+];
+
+/// Each room's place on the render: the first unclaimed plot a word of its
+/// name picks, then the generic words ("bed") for what's left.
+Map<int, _Plot> _plotRooms(List<Room> rooms) {
+  final plotOf = <int, _Plot>{};
+  final used = <_Plot>{};
+  String text(Room r) => '${r.name} ${r.subtitle ?? ''}'.toLowerCase();
+  for (final pass in [0, 1]) {
+    for (final (i, room) in rooms.indexed) {
+      if (plotOf.containsKey(i)) continue;
+      for (final p in _plots) {
+        if (used.contains(p)) continue;
+        final words = pass == 0 ? p.keys : p.generic;
+        if (words.any(text(room).contains)) {
+          plotOf[i] = p;
+          used.add(p);
+          break;
+        }
+      }
+    }
+  }
+  return plotOf;
+}
+
+/// The home page's house: the apartment render with a glow pooling in each
+/// room that has something on (amber for lights, by their level; cyan for
+/// an AC cooling; violet on a TV that's on), a label per room hung from a
+/// stem — tap a room's floor or its label to open it — and a sideways drag
+/// that turns the whole plan in perspective before it springs back. After
+/// an interactive 3D "machine" the user sent (stations on a plate with
+/// callouts), done with the user's own render instead of a GPU scene:
+/// the plan is one texture, so the tilt costs nothing to speak of.
+class _HouseView extends StatefulWidget {
+  const _HouseView({
+    required this.rooms,
+    required this.here,
+    required this.states,
+    required this.width,
+    required this.unit,
+    required this.night,
+    required this.dim,
+    required this.onOpen,
+    required this.image,
+    required this.cards,
+  });
+
+  final List<Room> rooms;
+  final int here;
+  final List<RoomState>? states;
+  final double width;
+  final double unit;
+  final bool night;
+
+  /// After dark: the render is dimmed so it doesn't light the room.
+  final bool dim;
+  final ValueChanged<int> onOpen;
+  final ImageProvider image;
+
+  /// Rooms as cards, for those with no place on the render — and for all
+  /// of them when the render can't be loaded (it isn't in the repo).
+  final Widget Function(List<int> rooms) cards;
+
+  @override
+  State<_HouseView> createState() => _HouseViewState();
+}
+
+class _HouseViewState extends State<_HouseView>
+    with SingleTickerProviderStateMixin {
+  ImageInfo? _info;
+  bool _failed = false;
+  ImageStream? _stream;
+  late final _listener = ImageStreamListener(
+    (info, _) {
+      if (!mounted) {
+        info.dispose();
+        return;
+      }
+      setState(() {
+        _info?.dispose();
+        _info = info;
+      });
+    },
+    onError: (_, _) {
+      if (mounted) setState(() => _failed = true);
+    },
+  );
+
+  /// How far the plan is turned, −1 (dragged left) to 1: the finger's
+  /// while it's down, then springing back to 0.
+  final _drag = ValueNotifier(0.0);
+  double _released = 0;
+  late final _spring = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+  static const _curve = ElasticOutCurve(0.7);
+
+  double get _yaw => _spring.isAnimating
+      ? _released * (1 - _curve.transform(_spring.value))
+      : _drag.value;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(_HouseView old) {
+    super.didUpdateWidget(old);
+    if (old.image != widget.image) _resolve();
+  }
+
+  void _resolve() {
+    final stream = widget.image.resolve(createLocalImageConfiguration(context));
+    if (stream.key == _stream?.key) return;
+    _stream?.removeListener(_listener);
+    _stream = stream..addListener(_listener);
+  }
+
+  @override
+  void dispose() {
+    _stream?.removeListener(_listener);
+    _info?.dispose();
+    _spring.dispose();
+    _drag.dispose();
+    super.dispose();
+  }
+
+  ColorFilter? get _filter {
+    if (widget.night) {
+      return const ColorFilter.matrix([
+        0.42, 0, 0, 0, 0, //
+        0, 0.18, 0, 0, 0, //
+        0, 0, 0.16, 0, 0, //
+        0, 0, 0, 1, 0,
+      ]);
+    }
+    if (widget.dim) {
+      return const ColorFilter.matrix([
+        0.55, 0, 0, 0, 0, //
+        0, 0.55, 0, 0, 0, //
+        0, 0, 0.60, 0, 0, //
+        0, 0, 0, 1, 0,
+      ]);
+    }
+    return null;
+  }
+
+  Matrix4 _matrix(double yaw) => Matrix4.identity()
+    ..setEntry(3, 2, -0.0015)
+    ..rotateY(yaw * 0.3)
+    ..rotateX(yaw.abs() * 0.06);
+
+  @override
+  Widget build(BuildContext context) {
+    final all = [for (var i = 0; i < widget.rooms.length; i++) i];
+    if (_failed) return widget.cards(all);
+    final w = widget.width;
+    final h = w / _blueprintAspect;
+    final u = widget.unit;
+    final night = widget.night;
+    final amber = _hue(_warm, night);
+    final plotOf = _plotRooms(widget.rooms);
+    final stem = u * 1.6;
+    final glows = <(Offset, double, Color)>[];
+    final halos = <(Offset, double, Color)>[];
+    final stems = <(Offset, double, Color)>[];
+    final labels = <Widget>[];
+    Offset at(Offset f) => Offset(f.dx * w, f.dy * h);
+    for (final MapEntry(key: i, value: plot) in plotOf.entries) {
+      final room = widget.rooms[i];
+      final s = widget.states?[i];
+      if (s != null) {
+        if (s.cooling > 0) {
+          halos.add((
+            at(plot.centre),
+            w * 0.17,
+            _hue(_acCool, night).withValues(alpha: 0.45),
+          ));
+        }
+        if (s.lightsOn > 0) {
+          glows.add((
+            at(plot.centre),
+            w * 0.13,
+            amber.withValues(alpha: 0.3 + 0.45 * (s.level ?? 100) / 100),
+          ));
+        }
+        if (s.screensOn > 0) {
+          for (final p in plot.screens) {
+            glows.add((
+              at(p),
+              w * 0.05,
+              _hue(_tvViolet, night).withValues(alpha: 0.7),
+            ));
+          }
+        }
+      }
+      final foot = at(plot.foot);
+      stems.add((foot, stem, amber));
+      final lit = s != null && !s.quiet;
+      final meta = [
+        if (i == widget.here) 'Here',
+        s?.line ?? room.summary,
+      ].join(' · ');
+      labels.add(
+        Positioned(
+          left: plot.right ? null : foot.dx - u * 0.7,
+          right: plot.right ? w - foot.dx - u * 0.7 : null,
+          top: foot.dy + stem,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => widget.onOpen(i),
+            child: _RoomLabel(
+              index: i,
+              name: room.name,
+              meta: meta,
+              locked: room.pin != null && i != widget.here,
+              lit: lit,
+              hue: amber,
+              unit: u,
+              maxWidth: w * 0.46,
+              night: night,
+            ),
+          ),
+        ),
+      );
+    }
+    final plan = SizedBox(
+      width: w,
+      height: h,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: CustomPaint(
+                painter: _HousePainter(
+                  image: _info?.image,
+                  filter: _filter,
+                  glows: glows,
+                  halos: halos,
+                  stems: stems,
+                  unit: u,
+                ),
+              ),
+            ),
+          ),
+          ...labels,
+        ],
+      ),
+    );
+    final house = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: (d) {
+        final p = Offset(d.localPosition.dx / w, d.localPosition.dy / h);
+        for (final MapEntry(key: i, value: plot) in plotOf.entries) {
+          if (plot.contains(p)) {
+            widget.onOpen(i);
+            return;
+          }
+        }
+      },
+      // Sideways only: up and down still scroll the panel.
+      onHorizontalDragStart: (_) {
+        final yaw = _yaw;
+        _spring.stop();
+        _drag.value = yaw;
+      },
+      onHorizontalDragUpdate: (d) =>
+          _drag.value = (_drag.value + d.delta.dx / w * 2.4).clamp(-1.0, 1.0),
+      onHorizontalDragEnd: (_) {
+        _released = _drag.value;
+        _spring.forward(from: 0);
+        _drag.value = 0;
+      },
+      child: plan,
+    );
+    final tilted = AnimatedBuilder(
+      animation: Listenable.merge([_spring, _drag]),
+      builder: (context, child) => Transform(
+        transform: _matrix(_yaw),
+        alignment: Alignment.center,
+        child: child,
+      ),
+      child: house,
+    );
+    final unplotted = [
+      for (final i in all)
+        if (!plotOf.containsKey(i)) i,
+    ];
+    if (unplotted.isEmpty) return tilted;
+    return Column(
+      children: [
+        tilted,
+        SizedBox(height: u * 0.8),
+        widget.cards(unplotted),
+      ],
+    );
+  }
+}
+
+/// A room's callout on the house: its number and name (and a lock when it
+/// asks for a code), then what's on in it — or what's in it when nothing
+/// is. Hangs from a stem at the room's floor, like the station labels in
+/// the machine the user sent.
+class _RoomLabel extends StatelessWidget {
+  const _RoomLabel({
+    required this.index,
+    required this.name,
+    required this.meta,
+    required this.locked,
+    required this.lit,
+    required this.hue,
+    required this.unit,
+    required this.maxWidth,
+    required this.night,
+  });
+
+  final int index;
+  final String name;
+  final String meta;
+  final bool locked;
+  final bool lit;
+  final Color hue;
+  final double unit;
+  final double maxWidth;
+  final bool night;
+
+  @override
+  Widget build(BuildContext context) {
+    final u = unit;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 400),
+        padding: EdgeInsets.fromLTRB(u * 0.65, u * 0.45, u * 0.65, u * 0.5),
+        decoration: BoxDecoration(
+          color: const Color(0xEE14171B),
+          borderRadius: BorderRadius.circular(u * 0.55),
+          border: Border.all(color: hue.withValues(alpha: lit ? 0.75 : 0.3)),
+          boxShadow: [
+            BoxShadow(
+              color: lit
+                  ? hue.withValues(alpha: 0.25)
+                  : Colors.black.withValues(alpha: 0.3),
+              blurRadius: u * (lit ? 1.4 : 1),
+              offset: Offset(0, u * 0.3),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  (index + 1).toString().padLeft(2, '0'),
+                  style: TextStyle(
+                    color: hue,
+                    fontSize: u * 0.56,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    height: 1,
+                  ),
+                ),
+                SizedBox(width: u * 0.5),
+                Flexible(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _white.withValues(alpha: night ? 0.8 : 1),
+                      fontSize: u * 0.74,
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
+                    ),
+                  ),
+                ),
+                if (locked) ...[
+                  SizedBox(width: u * 0.35),
+                  Icon(
+                    Icons.lock_rounded,
+                    size: u * 0.7,
+                    color: _white.withValues(alpha: 0.45),
+                  ),
+                ],
+              ],
+            ),
+            SizedBox(height: u * 0.3),
+            Text(
+              meta,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: lit ? hue : const Color(0xFF8E939C),
+                fontSize: u * 0.56,
+                fontWeight: FontWeight.w500,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The render (dimmed after dark), the rooms' glows and the labels' stems.
+class _HousePainter extends CustomPainter {
+  _HousePainter({
+    required this.image,
+    required this.filter,
+    required this.glows,
+    required this.halos,
+    required this.stems,
+    required this.unit,
+  });
+
+  final ui.Image? image;
+  final ColorFilter? filter;
+
+  /// Centre, radius and colour (its alpha is the peak) of each glow.
+  final List<(Offset, double, Color)> glows;
+
+  /// The same for the rings round rooms being cooled.
+  final List<(Offset, double, Color)> halos;
+
+  /// Foot, length and colour of each label's stem.
+  final List<(Offset, double, Color)> stems;
+  final double unit;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // A contact shadow under the plan, so it sits on the sky rather than
+    // floating in it.
+    final ground = Rect.fromCenter(
+      center: Offset(size.width * 0.5, size.height * 0.86),
+      width: size.width * 1.05,
+      height: size.height * 0.5,
+    );
+    canvas.drawOval(
+      ground,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.black.withValues(alpha: 0.55),
+            Colors.black.withValues(alpha: 0),
+          ],
+          stops: const [0.3, 1],
+        ).createShader(ground),
+    );
+    final img = image;
+    if (img != null) {
+      canvas.drawImageRect(
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        Offset.zero & size,
+        Paint()
+          ..colorFilter = filter
+          ..filterQuality = FilterQuality.medium,
+      );
+    }
+    for (final (c, r, color) in glows) {
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [color, color.withValues(alpha: 0)],
+            stops: const [0.08, 1],
+          ).createShader(Rect.fromCircle(center: c, radius: r)),
+      );
+    }
+    for (final (c, r, color) in halos) {
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              color.withValues(alpha: 0),
+              color,
+              color.withValues(alpha: 0),
+            ],
+            stops: const [0.45, 0.78, 1],
+          ).createShader(Rect.fromCircle(center: c, radius: r)),
+      );
+    }
+    for (final (foot, length, color) in stems) {
+      final end = foot + Offset(0, length);
+      canvas.drawLine(
+        foot,
+        end,
+        Paint()
+          ..strokeWidth = 1
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              color.withValues(alpha: 0.15),
+              color.withValues(alpha: 0.85),
+            ],
+          ).createShader(Rect.fromPoints(foot, end + const Offset(1, 0))),
+      );
+      canvas.drawCircle(
+        foot,
+        unit * 0.45,
+        Paint()..color = color.withValues(alpha: 0.22),
+      );
+      canvas.drawCircle(foot, unit * 0.2, Paint()..color = color);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HousePainter old) =>
+      old.image != image ||
+      old.filter != filter ||
+      old.unit != unit ||
+      !listEquals(old.glows, glows) ||
+      !listEquals(old.halos, halos) ||
+      !listEquals(old.stems, stems);
 }
 
 /// The panel's foot (from the user's mock-up): Wi-Fi on the left — green
@@ -2832,6 +3528,9 @@ class EnergyTracker extends ChangeNotifier {
   bool _loaded = false;
 
   int? lightsOn, cooling, screensOn;
+
+  /// What's on in each room (by [rooms]' order), for the house view.
+  List<RoomState>? roomStates;
   Draw? draw;
   DateTime now = DateTime.now();
 
@@ -2883,6 +3582,28 @@ class EnergyTracker extends ChangeNotifier {
     lightsOn = ls.where((s) => s?.on == true).length;
     cooling = as.where((s) => s != null && s.on && s.mode <= 2).length;
     screensOn = tvOn + boxOn;
+    final lightOf = {for (final (i, l) in lights.indexed) l: ls[i]};
+    final acOf = {for (final (i, a) in acs.indexed) a: as[i]};
+    final tvOf = {for (final (i, t) in tvs.indexed) t: ts[i]};
+    final boxOf = {for (final (i, b) in boxes.indexed) b: bs[i]};
+    roomStates = [
+      for (final r in rooms)
+        RoomState(
+          lightsOn: r.lights.where((l) => lightOf[l]?.on == true).length,
+          level: r.lights
+              .map((l) => lightOf[l])
+              .where((s) => s?.on == true)
+              .map((s) => s!.brightness ?? 100)
+              .fold(null, (int? m, v) => m == null || v > m ? v : m),
+          cooling: r.acs.where((a) {
+            final s = acOf[a];
+            return s != null && s.on && s.mode <= 2;
+          }).length,
+          screensOn:
+              r.tvs.where((t) => tvOf[t] == true).length +
+              r.boxes.where((b) => boxOf[b] == true).length,
+        ),
+    ];
     now = DateTime.now();
     draw = Draw(
       acs: acW,

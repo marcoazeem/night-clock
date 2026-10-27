@@ -60,3 +60,7 @@ app.*.map.json
 
 # Electricity bills (account number, meter readings) — private
 /stelco*
+
+# The 3D render of the apartment on the home page — the user's home, so
+# it stays out of the public repo. Without it the home page shows room cards.
+/assets/images/blueprint.png
