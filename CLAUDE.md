@@ -239,7 +239,15 @@ app builds fine but the lights panel silently disappears.
   "sitting", "kitchen"; a spare bedroom by "bed") — a room with no plot,
   or every room when the PNG is missing, gets the old 2×2 card
   (`_cards`). The PNG is gitignored (it's the user's home); a fresh clone
-  shows the cards. Not yet on the iPad. Then a tally of the whole house
+  shows the cards. The render was swapped for a second version (1448×1086,
+  ceiling fans and ACs drawn in) the same day — the plots are tuned to
+  *that* file, so a new render means re-plotting both apps (check with a
+  golden). iPad: the same in Panel.m (`NCHouseView`, `kPlots`, `NCRoomLabel`,
+  `NCHousePlan`; the tilt is a `CATransform3D` on the plan under a
+  perspective `sublayerTransform`, sprung back with `CASpringAnimation`;
+  dimming multiplies the render once per mode — `tintedRender`; build.sh
+  copies the PNG when present), `NCEnergyTracker.roomStates` per room,
+  `NCHomeView.dim` set from the clock. Then a tally of the whole house
   (`_HomeStats` / `NCHomeStats`) — three tiles: lights on, ACs cooling
   (on in cool/dry/auto), screens on (TVs + boxes) — from the house poll
   (`EnergyTracker`, which also keeps `roomStates` per room for the house);

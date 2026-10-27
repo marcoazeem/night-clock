@@ -2747,7 +2747,7 @@ class _Plot {
 }
 
 /// The render's width over its height.
-const _blueprintAspect = 1377 / 1008;
+const _blueprintAspect = 1448 / 1086;
 
 const _plots = [
   // The smaller bedroom, top left.
@@ -2755,56 +2755,54 @@ const _plots = [
     keys: ['haam'],
     generic: ['bed'],
     floor: [
-      Offset(0.109, 0.030),
-      Offset(0.418, 0.022),
-      Offset(0.415, 0.335),
-      Offset(0.098, 0.345),
+      Offset(0.060, 0.050),
+      Offset(0.450, 0.045),
+      Offset(0.450, 0.410),
+      Offset(0.055, 0.415),
     ],
-    centre: Offset(0.26, 0.19),
-    foot: Offset(0.21, 0.29),
-    screens: [Offset(0.14, 0.21)],
+    centre: Offset(0.27, 0.23),
+    foot: Offset(0.20, 0.36),
+    screens: [Offset(0.105, 0.265)],
   ),
   // The master bedroom, top right.
   _Plot(
     keys: ['m&m', 'master'],
     generic: ['bed'],
     floor: [
-      Offset(0.633, 0.040),
-      Offset(0.975, 0.030),
-      Offset(0.978, 0.560),
-      Offset(0.633, 0.545),
+      Offset(0.680, 0.050),
+      Offset(0.955, 0.045),
+      Offset(0.955, 0.550),
+      Offset(0.680, 0.545),
     ],
-    centre: Offset(0.80, 0.30),
-    foot: Offset(0.76, 0.50),
+    centre: Offset(0.82, 0.24),
+    foot: Offset(0.73, 0.47),
     right: true,
-    screens: [Offset(0.69, 0.27)],
+    screens: [Offset(0.905, 0.275)],
   ),
   // The sitting room, bottom left, with the hall.
   _Plot(
     keys: ['sitting', 'living', 'lounge'],
     floor: [
-      Offset(0.030, 0.345),
-      Offset(0.625, 0.335),
-      Offset(0.630, 0.560),
-      Offset(0.520, 0.780),
-      Offset(0.280, 0.880),
-      Offset(0.010, 0.740),
+      Offset(0.055, 0.420),
+      Offset(0.620, 0.415),
+      Offset(0.620, 0.860),
+      Offset(0.055, 0.860),
     ],
-    centre: Offset(0.33, 0.60),
-    foot: Offset(0.19, 0.74),
-    screens: [Offset(0.13, 0.56)],
+    centre: Offset(0.33, 0.63),
+    foot: Offset(0.19, 0.76),
+    screens: [Offset(0.115, 0.635)],
   ),
   // The kitchen, bottom right.
   _Plot(
     keys: ['kitchen'],
     floor: [
-      Offset(0.640, 0.560),
-      Offset(0.975, 0.560),
-      Offset(0.970, 0.870),
-      Offset(0.640, 0.850),
+      Offset(0.630, 0.600),
+      Offset(0.955, 0.600),
+      Offset(0.955, 0.920),
+      Offset(0.630, 0.900),
     ],
-    centre: Offset(0.80, 0.72),
-    foot: Offset(0.80, 0.78),
+    centre: Offset(0.80, 0.80),
+    foot: Offset(0.76, 0.82),
     right: true,
   ),
 ];
