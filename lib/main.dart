@@ -90,15 +90,18 @@ bool _isNight(DateTime t) =>
 /// The hairline's tint at night.
 const _nightTime = Color(0xFFFF8A75);
 
-/// The clock face: Inter Bold with tabular figures, in one colour that
-/// follows the sky (see [_clockColor]). It replaced Bungee Tint, a two-colour
-/// font, on 28 Oct 2026. Tabular figures are all 0.6465 em wide (the colon
-/// 0.2686), so a narrow "1" doesn't change the clock's width from minute to
-/// minute, and the figures stand [_capHeight] em on the baseline — measured
+/// The clock face: Chakra Petch Bold, in one colour that follows the sky
+/// (see [_clockColor]). The user chose it from a sheet of dashboard typefaces
+/// on 28 Oct 2026, after a day of Inter (which had replaced Bungee Tint, a
+/// two-colour font). Its figures are proportional — a "1" is 0.382 em, a "0"
+/// 0.652 — so each one is drawn centred in a slot the width of the widest,
+/// and the clock's width doesn't change from minute to minute. The figures
+/// stand [_capHeight] em on the baseline, flat (no overshoot) — all measured
 /// from Flutter's own render of the bundled TTF.
-const _digitSlot = 0.6465;
-const _colonSlot = 0.2686;
-const _capHeight = 0.728;
+const _clockFamily = 'Chakra Petch';
+const _digitSlot = 0.652;
+const _colonSlot = 0.232;
+const _capHeight = 0.703;
 
 /// The clock's colour for the sky behind it: sunrise amber in the morning,
 /// sunny yellow by day, sunset coral in the evening, steel blue in the rain;
@@ -437,7 +440,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         color: _hue(const Color(0xFFD5DCFF), night),
       );
     }
-    // No card behind it. Inter, in the clock's colour.
+    // No card behind it. The clock's font, in its colour.
     final color = _clockColor(_now, night: night, raining: _raining);
     if (inline) {
       return Row(
@@ -448,8 +451,8 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
           Text(
             '${w.temp}°C',
             style: TextStyle(
-              fontFamily: 'Inter',
-              fontWeight: FontWeight.w400,
+              fontFamily: _clockFamily,
+              fontWeight: FontWeight.w700,
               color: color,
               fontSize: d * 0.26,
               height: 1,
@@ -469,8 +472,8 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
           Text(
             '${w.temp}°C',
             style: TextStyle(
-              fontFamily: 'Inter',
-              fontWeight: FontWeight.w400,
+              fontFamily: _clockFamily,
+              fontWeight: FontWeight.w700,
               color: color,
               fontSize: d * 0.42,
               height: 1.05,
@@ -605,8 +608,8 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               final digitSize = min(w * 0.55, h * 1.15);
               // The time's ink stands 0.79 of digitSize tall (as Bungee's
               // did — every other size on the face follows digitSize), and
-              // Inter's figures are _capHeight em, so its font size is a
-              // little bigger than digitSize.
+              // the figures are _capHeight em, so the font size is a little
+              // bigger than digitSize.
               final fontSize = digitSize * 0.79 / _capHeight;
               // The time's own width: four digit slots and the colon's.
               final timeWidth = fontSize * (4 * _digitSlot + _colonSlot);
@@ -620,40 +623,50 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               // size whichever way up the phone is.
               final barSpan = min(w, h);
               final digitStyle = TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: _clockFamily,
                 color: clockColor,
                 fontSize: fontSize,
                 fontWeight: FontWeight.w700,
-                fontFeatures: const [FontFeature.tabularFigures()],
                 height: 1.0,
               );
-              // Supporting text uses regular Inter in the same sky colour.
+              // The date is the same face, smaller, in the same sky colour.
               final dateStyle = TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: _clockFamily,
                 color: clockColor,
-                fontWeight: FontWeight.w400,
+                fontWeight: FontWeight.w700,
                 fontSize: digitSize * 0.2,
                 height: 1.0,
                 letterSpacing: digitSize * 0.012,
               );
 
-              // Inter's line box leaves room above and below the figures, so
-              // the baseline is pinned to the foot of a box just the ink's
-              // height: the digits fill it and the hairline sits close under
-              // them. (A fixed width too: inside the FittedBox the width is
-              // unbounded, and an OverflowBox would take all of it.)
+              // Each glyph is centred in its own slot (the font's figures are
+              // proportional), and the line box leaves room above and below
+              // the figures, so every glyph's baseline is pinned to the foot
+              // of a box just the ink's height: the digits fill it and the
+              // hairline sits close under them. (A fixed width too: inside
+              // the FittedBox the width is unbounded, and an OverflowBox
+              // would take all of it.)
               final time = SizedBox(
                 width: timeWidth,
                 height: digitSize * 0.79,
-                child: OverflowBox(
-                  alignment: Alignment.topCenter,
-                  maxWidth: double.infinity,
-                  maxHeight: double.infinity,
-                  child: Baseline(
-                    baseline: digitSize * 0.79,
-                    baselineType: TextBaseline.alphabetic,
-                    child: Text('$hh:$mm', style: digitStyle, softWrap: false),
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final ch in '$hh:$mm'.split(''))
+                      SizedBox(
+                        width: fontSize * (ch == ':' ? _colonSlot : _digitSlot),
+                        child: OverflowBox(
+                          alignment: Alignment.topCenter,
+                          maxWidth: double.infinity,
+                          maxHeight: double.infinity,
+                          child: Baseline(
+                            baseline: digitSize * 0.79,
+                            baselineType: TextBaseline.alphabetic,
+                            child: Text(ch, style: digitStyle, softWrap: false),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               );
 

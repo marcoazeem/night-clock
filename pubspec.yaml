@@ -71,8 +71,13 @@ flutter:
     - assets/images/
 
   fonts:
-    # Inter for everything: the clock (Bold, tabular figures), the date and
-    # temperature, and the dashboard's labels and readouts.
+    # Chakra Petch for the clock face — the time, date and temperature, all
+    # Bold (the user picked it from a sheet of dashboard typefaces).
+    - family: Chakra Petch
+      fonts:
+        - asset: fonts/ChakraPetch-Bold.ttf
+          weight: 700
+    # Inter for the dashboard's labels and readouts.
     - family: Inter
       fonts:
         - asset: fonts/Inter-Light.ttf

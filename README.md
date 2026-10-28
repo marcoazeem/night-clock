@@ -15,8 +15,8 @@ charging, without giving up the clock.
 
 ## Look
 
-- **Clock** in [Inter](https://rsms.me/inter/) — bold, tabular figures —
-  coloured to match the sky: sunrise amber, sunny yellow, sunset coral,
+- **Clock** in [Chakra Petch](https://fonts.google.com/specimen/Chakra+Petch)
+  Bold — a squared, angular dashboard face — coloured to match the sky: sunrise amber, sunny yellow, sunset coral,
   steel blue in the rain, moonlit lavender after dark and slate in night
   mode. The date is in the same colour, with the current weather beside it — sunny / clear / rain and the
   temperature, from [Open-Meteo](https://open-meteo.com/) (set
@@ -195,11 +195,11 @@ standby.
    `/remoteapp/tv/ui_service/nightclock/actions/authenticationcode` as
    `{"authNum":"1234"}` (any MQTT client will do — see lib/tv.dart).
 
-## Font
+## Fonts
 
-**Inter** (by Rasmus Andersson), SIL OFL, in `fonts/` with its license:
-the clock in Bold with tabular figures, everything else in Regular and
-Medium.
+**Chakra Petch** (by Cadson Demak), SIL OFL, in `fonts/` with its license:
+the clock face — time, date and temperature — in Bold. **Inter** (by Rasmus
+Andersson), SIL OFL, likewise: everything else, in Regular and Medium.
 
 ## Lightbox
 
