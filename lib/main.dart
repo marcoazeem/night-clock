@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -393,51 +394,24 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   /// icon then temperature on one small line under the date (standing, so
   /// the clock gets the full width).
   Widget _weatherCard(Weather w, double d, bool night, {bool inline = false}) {
-    final daylight = _now.hour >= 6 && _now.hour < 18;
-    final size = d * (inline ? 0.3 : 0.46);
-    final Widget icon;
-    if (w.raining) {
-      // A cloud with three drops under it.
-      icon = SizedBox.square(
-        dimension: size,
-        child: Stack(
-          children: [
-            Align(
-              alignment: Alignment.topCenter,
-              child: Icon(
-                Icons.cloud_rounded,
-                size: size * 0.82,
-                color: _white.withValues(alpha: 0.92),
-              ),
-            ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < 3; i++)
-                    Icon(
-                      Icons.water_drop_rounded,
-                      size: size * 0.24,
-                      color: _hue(const Color(0xFF7CC4FF), night),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    } else if (daylight) {
-      icon = Icon(
-        Icons.wb_sunny_rounded,
-        size: size,
-        color: _hue(const Color(0xFFFFC94D), night),
-      );
-    } else {
-      icon = Icon(
-        Icons.nightlight_round,
-        size: size,
-        color: _hue(const Color(0xFFD5DCFF), night),
+    // Meteocons (Bas Milius, MIT) — the user picked them over Material,
+    // Oct 2026. Their art fills ~70% of the 64-unit box, hence the size up.
+    final size = d * (inline ? 0.4 : 0.6);
+    final name = const bool.fromEnvironment('FORCE_RAIN')
+        ? 'rain'
+        : const bool.fromEnvironment('FORCE_CLEAR')
+        ? 'clear-${w.isDay ? 'day' : 'night'}'
+        : w.icon;
+    Widget icon = SvgPicture.asset(
+      'assets/weather/$name.svg',
+      width: size,
+      height: size,
+    );
+    // Night mode: towards the dashboard's red, like everything else.
+    if (night) {
+      icon = ColorFiltered(
+        colorFilter: ColorFilter.mode(_hue(_white, true), BlendMode.modulate),
+        child: icon,
       );
     }
     // No card behind it. The clock's font, in its colour.

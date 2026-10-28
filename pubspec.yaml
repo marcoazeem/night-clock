@@ -41,6 +41,8 @@ dependencies:
   pointycastle: ^4.0.0
   video_player: ^2.14.1
   hugeicons: 1.2.0
+  # Meteocons weather icons (assets/weather).
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -52,7 +54,6 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  flutter_svg: ^2.3.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -69,6 +70,7 @@ flutter:
   assets:
     - assets/video/
     - assets/images/
+    - assets/weather/
 
   fonts:
     # Chakra Petch for the clock face — the time, date and temperature, all

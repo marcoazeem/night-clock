@@ -5,21 +5,50 @@
 import 'dart:convert';
 import 'dart:io';
 
-/// What it's doing outside. The user's climate has two kinds of weather, so
-/// that's all this tells apart: raining or not.
+/// What it's doing outside: raining or not (the sky and the clock's colour
+/// follow that), plus the WMO weather code and day / night for the icon.
 class Weather {
   const Weather({
     required this.raining,
     required this.temp,
     required this.low,
     required this.high,
+    this.code = 0,
+    this.isDay = true,
   });
   final bool raining;
+
+  /// WMO weather code (Open-Meteo's `weather_code`).
+  final int code;
+
+  /// Whether the sun is up there (Open-Meteo's `is_day`, sunrise to sunset).
+  final bool isDay;
+
+  /// The Meteocons icon for it (`assets/weather/<name>.svg`).
+  String get icon => weatherIcon(code, isDay, raining: raining);
 
   /// Now, and today's low and high — °C, rounded.
   final int temp;
   final int low;
   final int high;
+}
+
+/// A WMO weather code as a Meteocons icon name: clear, partly cloudy,
+/// overcast, fog, drizzle, rain, showers, thunderstorms or snow, with day
+/// and night versions where they differ. [raining] (rain measured under a
+/// dry code) shows rain.
+String weatherIcon(int code, bool day, {bool raining = false}) {
+  final dn = day ? 'day' : 'night';
+  if (code >= 95) return 'thunderstorms-rain';
+  if (code >= 85 || (code >= 71 && code <= 77)) return 'snow';
+  if (code >= 80) return 'partly-cloudy-$dn-rain'; // showers
+  if (code >= 61) return 'rain';
+  if (code >= 51) return 'drizzle';
+  if (raining) return 'rain';
+  if (code >= 45) return 'fog-$dn';
+  if (code == 3) return 'overcast';
+  if (code == 2) return 'partly-cloudy-$dn';
+  return 'clear-$dn'; // 0 clear, 1 mainly clear
 }
 
 /// Where to ask about: `WEATHER_AT="4.1755,73.5093"` (lat,lon), or null if
@@ -41,7 +70,7 @@ Future<Weather> fetchWeather((double, double) place) async {
       Uri.https('api.open-meteo.com', '/v1/forecast', {
         'latitude': '$lat',
         'longitude': '$lon',
-        'current': 'temperature_2m,precipitation,weather_code',
+        'current': 'temperature_2m,precipitation,weather_code,is_day',
         'daily': 'temperature_2m_min,temperature_2m_max',
         'forecast_days': '1',
         'timezone': 'auto',
@@ -61,6 +90,8 @@ Future<Weather> fetchWeather((double, double) place) async {
       temp: (current['temperature_2m'] as num).round(),
       low: today('temperature_2m_min'),
       high: today('temperature_2m_max'),
+      code: code,
+      isDay: (current['is_day'] as num?)?.toInt() != 0,
     );
   } finally {
     client.close(force: true);

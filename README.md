@@ -201,6 +201,11 @@ standby.
 the clock face — time, date and temperature — in Bold. **Inter** (by Rasmus
 Andersson), SIL OFL, likewise: everything else, in Regular and Medium.
 
+## Weather icons
+
+[Meteocons](https://github.com/basmilius/weather-icons) by Bas Milius,
+MIT licence (`assets/weather/LICENSE`).
+
 ## Lightbox
 
 The light tiles are based on

@@ -484,7 +484,18 @@ app builds fine but the lights panel silently disappears.
   Shown right of the clock (`_weatherCard`, layout from a wall-panel photo
   the user sent) with no card behind it — the user had the frosted tile
   removed. Its temperature is in the clock's colour too, like the time and date
-  (the user asked for the whole top to match); the icon is Material: sun (06–18) / moon / cloud with drops,
+  (the user asked for the whole top to match); the icon is **Meteocons**
+  fill (Bas Milius, MIT; `assets/weather/*.svg` + LICENSE, via
+  flutter_svg — the user picked it from a sheet over Material, Hugeicons
+  and Meteocons line, 28 Oct 2026), chosen by `weatherIcon(code, isDay)`
+  in weather.dart from Open-Meteo's WMO `weather_code` and `is_day`:
+  clear, partly cloudy, overcast, fog, drizzle, rain, showers,
+  thunderstorms, snow, day/night where they differ (the sky and clock
+  colour still only know rain / not). Night mode multiplies it towards
+  red. Drawn ~1.3× the old Material size (the art fills ~70% of its box).
+  iPad: glyphs_test.dart renders them to full-colour `wx_<name>.png`,
+  FaceView draws `NCWeather.icon` (red-tinted copy cached for night).
+  Before: Material sun (06–18) / moon / cloud with drops,
   the temp now, and today's low ~ high (Open-Meteo daily min/max). Standing, it's one small line (icon then temperature) under
   the date, so the clock gets the full width — beside it the (then Bungee)
   digits left the clock small and the user asked for it bigger (Oct
