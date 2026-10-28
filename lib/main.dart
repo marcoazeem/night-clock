@@ -90,27 +90,30 @@ bool _isNight(DateTime t) =>
 /// The hairline's tint at night.
 const _nightTime = Color(0xFFFF8A75);
 
-/// The clock face: Bungee Tint, a two-colour font (fill and a thin inline)
-/// — its glyphs carry their own colours, so the time ignores text colour.
-/// It replaced Nabla, which the user found hard to read. Flutter can't pick
-/// a font palette, so `fonts/BungeeTint-<Sky>.ttf` are the font with our own
-/// pair in palette 0, one per sky (see [_clockFont]). Every digit sits in a
-/// fixed slot (the widest, "0", is 0.727 em), so a narrow "1" doesn't
-/// change the clock's width from minute to minute.
-const _digitSlot = 0.73;
-const _colonSlot = 0.384;
+/// The clock face: Inter Bold with tabular figures, in one colour that
+/// follows the sky (see [_clockColor]). It replaced Bungee Tint, a two-colour
+/// font, on 28 Oct 2026. Tabular figures are all 0.6465 em wide (the colon
+/// 0.2686), so a narrow "1" doesn't change the clock's width from minute to
+/// minute, and the figures stand [_capHeight] em on the baseline — measured
+/// from Flutter's own render of the bundled TTF.
+const _digitSlot = 0.6465;
+const _colonSlot = 0.2686;
+const _capHeight = 0.728;
 
-/// The clock's font for the sky behind it: sunrise amber in the morning,
-/// sunny yellow by day, sunset coral in the evening, steel blue in the
-/// rain; after dark moonlit lavender (deep blue in the rain), and slate in
-/// red night mode (23:00–06:00).
-String _clockFont(DateTime now, {required bool night, required bool raining}) {
-  if (night) return 'BungeeTintNight';
-  if (_isDark(now)) return raining ? 'BungeeTintDarkRain' : 'BungeeTintDark';
-  if (raining) return 'BungeeTintRain';
-  if (_isMorning(now)) return 'BungeeTintMorning';
-  if (_isEvening(now)) return 'BungeeTintEvening';
-  return 'BungeeTintDay';
+/// The clock's colour for the sky behind it: sunrise amber in the morning,
+/// sunny yellow by day, sunset coral in the evening, steel blue in the rain;
+/// after dark moonlit lavender (deep blue in the rain), and slate in red
+/// night mode (23:00–06:00). The time, date and temperature all use it (the
+/// fills of the old Bungee Tint palettes).
+Color _clockColor(DateTime now, {required bool night, required bool raining}) {
+  if (night) return const Color(0xFF56617C);
+  if (_isDark(now)) {
+    return raining ? const Color(0xFF6E9BD0) : const Color(0xFFB4C2FF);
+  }
+  if (raining) return const Color(0xFF8EC5F0);
+  if (_isMorning(now)) return const Color(0xFFFFB547);
+  if (_isEvening(now)) return const Color(0xFFFF8A6B);
+  return const Color(0xFFFFD23F);
 }
 
 /// How much of the room it's given the face actually fills. This is the size
@@ -434,8 +437,8 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         color: _hue(const Color(0xFFD5DCFF), night),
       );
     }
-    // No card behind it. The clock's font, in the same colours.
-    final font = _clockFont(_now, night: night, raining: _raining);
+    // No card behind it. Inter, in the clock's colour.
+    final color = _clockColor(_now, night: night, raining: _raining);
     if (inline) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -444,7 +447,13 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
           SizedBox(width: d * 0.08),
           Text(
             '${w.temp}°C',
-            style: TextStyle(fontFamily: font, fontSize: d * 0.26, height: 1),
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w400,
+              color: color,
+              fontSize: d * 0.26,
+              height: 1,
+            ),
           ),
         ],
       );
@@ -460,7 +469,9 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
           Text(
             '${w.temp}°C',
             style: TextStyle(
-              fontFamily: font,
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w400,
+              color: color,
               fontSize: d * 0.42,
               height: 1.05,
             ),
@@ -544,7 +555,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     final mm = _now.minute.toString().padLeft(2, '0');
     final night = _isNight(_now);
     final timeColor = night ? _nightTime : _white;
-    final clockFont = _clockFont(_now, night: night, raining: _raining);
+    final clockColor = _clockColor(_now, night: night, raining: _raining);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -592,8 +603,13 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               // the FittedBox below scales the column down until it fills its
               // box, and scaleDown never scales up.
               final digitSize = min(w * 0.55, h * 1.15);
+              // The time's ink stands 0.79 of digitSize tall (as Bungee's
+              // did — every other size on the face follows digitSize), and
+              // Inter's figures are _capHeight em, so its font size is a
+              // little bigger than digitSize.
+              final fontSize = digitSize * 0.79 / _capHeight;
               // The time's own width: four digit slots and the colon's.
-              final timeWidth = digitSize * (4 * _digitSlot + _colonSlot);
+              final timeWidth = fontSize * (4 * _digitSlot + _colonSlot);
               // Everything under the time is held to this — otherwise a long
               // date sets the width and the digits shrink to suit. Narrower
               // than the time on purpose: a full-width rule reads as an
@@ -604,43 +620,40 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               // size whichever way up the phone is.
               final barSpan = min(w, h);
               final digitStyle = TextStyle(
-                fontFamily: clockFont,
-                fontSize: digitSize,
+                fontFamily: 'Inter',
+                color: clockColor,
+                fontSize: fontSize,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
                 height: 1.0,
               );
-              // The date in the clock's font too, same colours.
+              // Supporting text uses regular Inter in the same sky colour.
               final dateStyle = TextStyle(
-                fontFamily: clockFont,
+                fontFamily: 'Inter',
+                color: clockColor,
+                fontWeight: FontWeight.w400,
                 fontSize: digitSize * 0.2,
                 height: 1.0,
                 letterSpacing: digitSize * 0.012,
               );
 
-              Widget slot(String ch, double width) => SizedBox(
-                width: digitSize * width,
-                child: Center(child: Text(ch, style: digitStyle)),
-              );
-              final digits = Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  slot(hh[0], _digitSlot),
-                  slot(hh[1], _digitSlot),
-                  slot(':', _colonSlot),
-                  slot(mm[0], _digitSlot),
-                  slot(mm[1], _digitSlot),
-                ],
-              );
-              // Bungee's ink ends 0.79 down its line; the rest is empty, so
-              // the line is trimmed there and the hairline sits close under.
-              // (A fixed width too: inside the FittedBox the width is
+              // Inter's line box leaves room above and below the figures, so
+              // the baseline is pinned to the foot of a box just the ink's
+              // height: the digits fill it and the hairline sits close under
+              // them. (A fixed width too: inside the FittedBox the width is
               // unbounded, and an OverflowBox would take all of it.)
               final time = SizedBox(
                 width: timeWidth,
                 height: digitSize * 0.79,
                 child: OverflowBox(
                   alignment: Alignment.topCenter,
-                  maxHeight: digitSize,
-                  child: digits,
+                  maxWidth: double.infinity,
+                  maxHeight: double.infinity,
+                  child: Baseline(
+                    baseline: digitSize * 0.79,
+                    baselineType: TextBaseline.alphabetic,
+                    child: Text('$hh:$mm', style: digitStyle, softWrap: false),
+                  ),
                 ),
               );
 
@@ -681,8 +694,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               // reference: a wall panel with a frosted weather tile). On its
               // side the clock column is narrow, so the card goes under it.
               // Standing, the weather goes on its own line under the date so
-              // the clock gets the whole width (beside it, Bungee's wide
-              // digits left the clock small — the user asked for it bigger).
+              // the clock keeps the whole width.
               final card = weather == null
                   ? null
                   : _weatherCard(weather, digitSize, night, inline: !landscape);
@@ -825,7 +837,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                                         style: const TextStyle(
                                           color: _white,
                                           fontSize: 15,
-                                          fontWeight: FontWeight.w600,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ],
@@ -1878,7 +1890,7 @@ class _KelvinSheetState extends State<_KelvinSheet> {
                                 style: TextStyle(
                                   color: _white,
                                   fontSize: u * 1.15,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                               label(
@@ -1897,7 +1909,7 @@ class _KelvinSheetState extends State<_KelvinSheet> {
                           style: TextStyle(
                             color: hue,
                             fontSize: u * 1.5,
-                            fontWeight: FontWeight.w300,
+                            fontWeight: FontWeight.w400,
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
@@ -2052,7 +2064,7 @@ class _KelvinSheetState extends State<_KelvinSheet> {
                                           ? Colors.black
                                           : _white.withValues(alpha: 0.75),
                                       fontSize: u * 0.85,
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ),
@@ -2639,7 +2651,7 @@ class HomePanel extends StatelessWidget {
                             style: TextStyle(
                               color: amber,
                               fontSize: u * 0.65,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
@@ -2653,7 +2665,7 @@ class HomePanel extends StatelessWidget {
                     style: TextStyle(
                       color: _white,
                       fontSize: u * 1.0,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       height: 1.2,
                     ),
                   ),
@@ -3169,7 +3181,7 @@ class _RoomLabel extends StatelessWidget {
                   style: TextStyle(
                     color: hue,
                     fontSize: u * 0.56,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                     fontFeatures: const [FontFeature.tabularFigures()],
                     height: 1,
                   ),
@@ -3183,7 +3195,7 @@ class _RoomLabel extends StatelessWidget {
                     style: TextStyle(
                       color: _white.withValues(alpha: night ? 0.8 : 1),
                       fontSize: u * 0.74,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                       height: 1.1,
                     ),
                   ),
@@ -3472,7 +3484,7 @@ class _HomeStatsState extends State<_HomeStats> {
                     style: TextStyle(
                       color: _white,
                       fontSize: u * 1.3,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       height: 1.1,
                     ),
                   ),
@@ -3735,7 +3747,7 @@ class _EnergyCardState extends State<_EnergyCard> {
             style: TextStyle(
               color: _white,
               fontSize: u * 1.15,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               height: 1.2,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
@@ -3798,7 +3810,7 @@ class _EnergyCardState extends State<_EnergyCard> {
                       style: TextStyle(
                         color: _white,
                         fontSize: u * 0.8,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                         letterSpacing: u * 0.15,
                       ),
                     ),
@@ -3820,7 +3832,7 @@ class _EnergyCardState extends State<_EnergyCard> {
                     style: TextStyle(
                       color: _white,
                       fontSize: u * 1.5,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       height: 1.1,
                     ),
                   ),
@@ -4149,7 +4161,7 @@ class _EnergyChartPainter extends CustomPainter {
               alpha: i == picked || p.projected ? 0.85 : 0.4,
             ),
             fontSize: u * 0.55,
-            fontWeight: p.projected ? FontWeight.w600 : FontWeight.w400,
+            fontWeight: p.projected ? FontWeight.w500 : FontWeight.w400,
           ),
         ),
         textDirection: TextDirection.ltr,
@@ -4310,7 +4322,7 @@ class _PinPadState extends State<PinPad> {
                   style: TextStyle(
                     color: _white.withValues(alpha: night ? 0.7 : 0.92),
                     fontSize: u * 1.2,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
         ),
@@ -4440,7 +4452,7 @@ class _PanelHeader extends StatelessWidget {
                 style: TextStyle(
                   color: _white.withValues(alpha: night ? 0.55 : 0.8),
                   fontSize: u * 0.8,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: u * 0.2,
                 ),
               ),
@@ -5020,7 +5032,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
             style: TextStyle(
               color: _white,
               fontSize: u * 0.95,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               height: 1.2,
             ),
           ),
@@ -5137,7 +5149,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                   style: TextStyle(
                     color: _white,
                     fontSize: u * 0.78,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     height: 1.2,
                   ),
                 ),
@@ -5229,7 +5241,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                               ? Colors.black
                               : _white.withValues(alpha: busy ? 0.3 : 0.7),
                           fontSize: u * 0.75,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: -u * 0.02,
                         ),
                       ),
@@ -5336,7 +5348,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                       style: TextStyle(
                         color: fg,
                         fontSize: u * 1.05,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -5547,7 +5559,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                 style: TextStyle(
                   color: fg,
                   fontSize: u * 0.8,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: u * 0.04,
                 ),
               ),
@@ -5760,7 +5772,7 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
           style: TextStyle(
             color: _white.withValues(alpha: on ? 0.95 : 0.7),
             fontSize: u * 1.05,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w500,
           ),
         ),
         SizedBox(height: u * 0.3),
@@ -5785,7 +5797,7 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
                 style: TextStyle(
                   color: badgeColor,
                   fontSize: u * 0.7,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -5868,7 +5880,7 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
                 style: TextStyle(
                   color: _white.withValues(alpha: on ? 1 : 0.5),
                   fontSize: u * 2.4,
-                  fontWeight: FontWeight.w300,
+                  fontWeight: FontWeight.w400,
                   letterSpacing: -u * 0.05,
                 ),
               ),

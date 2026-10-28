@@ -72,13 +72,17 @@ app builds fine but the lights panel silently disappears.
   hairline and the date, with the weather card beside the lot. `digitSize` (`min(w * 0.55,
   h * 1.15)`) deliberately overshoots and the outer `FittedBox` scales the
   column down to fit — `BoxFit.scaleDown` never scales *up*, so an
-  undershoot leaves the digits small with no way back. Each glyph sits in
-  a fixed slot (`_digitSlot` 0.73, `_colonSlot` 0.384 × font size — Bungee
-  Tint's widest digit "0" is 0.727 em, and its digits are proportional),
-  so `timeWidth` is `digitSize * (4 * 0.73 + 0.384)` and the clock doesn't
-  resize as the minutes change. Bungee's ink ends 0.79 down its line box,
-  so the time row is trimmed to that height (OverflowBox) and the hairline
-  sits close under it. That box needs `width: timeWidth` too: inside the
+  undershoot leaves the digits small with no way back. The time is one `Text` in Inter Bold with
+  tabular figures (`_digitSlot` 0.6465 and `_colonSlot` 0.2686 em, measured
+  from Flutter's own render), so `timeWidth` is `fontSize * (4 * 0.6465 +
+  0.2686)` and the clock doesn't resize as the minutes change. `digitSize`
+  is the face's layout unit: the time's ink stands `0.79 * digitSize` tall
+  (as Bungee's did), so `fontSize` is `digitSize * 0.79 / _capHeight`
+  (0.728), and a `Baseline` inside an OverflowBox pins the figures'
+  baseline to the foot of a box that height — Inter's line box has room
+  above and below the figures, and without this (the first Inter draft,
+  28 Oct 2026) the digits came out a third smaller with the hairline
+  floating under them. That box needs `width: timeWidth` too: inside the
   FittedBox the width is unbounded, an OverflowBox takes it all, and the
   release build silently drew no clock, date or weather at all (Oct 2026). The hairline is capped to
   `faceWidth` (`timeWidth * 0.61`), and so is the date.
@@ -89,20 +93,21 @@ app builds fine but the lights panel silently disappears.
   1.0 tall: full width ran the last digit into a dark patch at the top
   right of this phone's OLED (the user can't see that corner), so keep
   the top-right clear. On its side it's still 0.8 × 0.8.
-- Clock font: **Bungee Tint** (Google Fonts, David Jonathan Ross; COLRv0,
-  two colours: a fill and a thin inline). It replaced Nabla on 24 Oct 2026
-  — the user found Nabla's 3D digits hard to read at times — and asked for
-  its colours to follow the day, night and weather. Flutter can't select
-  a font palette, so `fonts/BungeeTint-<Sky>.ttf` are the font with our
-  own pair in CPAL palette 0 (fontTools; the script was a one-off), each
-  its own family: Morning amber/cream, Day yellow/orange, Evening coral,
-  Rain steel blue, Dark (19–23) moonlit lavender, DarkRain deep blue,
-  Night (23–06, red mode) slate. `_clockFont(now, night:, raining:)` picks
-  one; time, date and temperature all use it. Uppercase-only font (fine:
-  the date is uppercase). Covers digits, A–Z, ·, ° and C.
-- Everything else is **Inter** (bundled, 300–700), set app-wide as the
-  theme font. The date is in the clock's font too (same palette as
-  the time, `dateStyle`) — in red Inter it looked out of place (the user
+- Clock font: **Inter Bold**, tabular figures, in one colour that follows
+  the sky — `_clockColor(now, night:, raining:)`: Morning amber, Day
+  yellow, Evening coral, Rain steel blue, Dark (19–23) moonlit lavender,
+  DarkRain deep blue, Night (23–06, red mode) slate. The date (Regular,
+  0.2 × digitSize) and the temperature are in the same colour. The user
+  moved the clock to Inter on 28 Oct 2026 (done in Codex, "updated the
+  typography"); before it came Bungee Tint (24–28 Oct, a two-colour COLRv0
+  font with one re-paletted TTF per sky — those colours are the fills
+  Inter now uses) and Nabla before that. The Bungee files are gone from
+  fonts/ and pubspec (git history has them). The same change lightened
+  the dashboard: every w600/w700 label is w500 and the w300 readouts (AC
+  setpoint, kelvin) are w400 — keep new text to 400/500, 700 only for the
+  clock.
+- Everything else is **Inter** too (bundled 300–700), set app-wide as the
+  theme font. The date is in the clock's colour (`dateStyle`) — in red Inter it looked out of place (the user
   said so).
 - Gestures: vertical swipe = dim, and that's all — long-press 12/24h and
   double-tap seconds were removed at the user's request. The dim level
@@ -474,10 +479,10 @@ app builds fine but the lights panel silently disappears.
   the Maldives). Only rain vs not: WMO code ≥ 51 or precipitation > 0.1.
   Shown right of the clock (`_weatherCard`, layout from a wall-panel photo
   the user sent) with no card behind it — the user had the frosted tile
-  removed. Its temperature is in the clock's font too, like the time and date
+  removed. Its temperature is in the clock's colour too, like the time and date
   (the user asked for the whole top to match); the icon is Material: sun (06–18) / moon / cloud with drops,
   the temp now, and today's low ~ high (Open-Meteo daily min/max). Standing, it's one small line (icon then temperature) under
-  the date, so the clock gets the full width — beside it Bungee's wide
+  the date, so the clock gets the full width — beside it the (then Bungee)
   digits left the clock small and the user asked for it bigger (Oct
   2026). On its side the card goes under the clock. Its right edge keeps the clock's
   old margin, clear of the dead top-right patch.
@@ -489,10 +494,10 @@ app builds fine but the lights panel silently disappears.
 
 ## Fonts (fonts/)
 
-BungeeTint-{Morning,Day,Evening,Rain,Dark,DarkRain,Night}.ttf (see above)
-with OFL-BungeeTint.txt; Inter Light/Regular/Medium/SemiBold/Bold with
-OFL-Inter.txt. DSEG7 and then Nabla were removed when the clock font
-changed.
+Inter Light/Regular/Medium/SemiBold/Bold with OFL-Inter.txt — the clock
+uses Bold, the rest Regular and Medium (Light and SemiBold are bundled
+but unused since 28 Oct 2026). DSEG7, Nabla and then Bungee Tint were
+removed as the clock font changed.
 
 ## Verifying visuals without the phone
 
@@ -552,10 +557,16 @@ them by hand when the user wants both.
   `idevicedebug -n --detach run …`, `idevicescreenshot -n`) (reads lights.json;
   `FORCE_NIGHT=1` etc. work as env vars). Output in `ipad/build/`
   (gitignored — it holds Config.h with the keys).
-- iOS 10 can't draw the colour font, so `ipad/tool/glyphs_test.dart`
-  renders every character (once per sky palette, `<palette>_<hex>.png`)
-  and Material icon to PNGs via `flutter test`; the app draws those
-  (`NCGlyphs`, palette from `NCClockPalette`, matching `_clockFont`). Add an icon there when the panel needs a new one.
+- `ipad/tool/glyphs_test.dart` renders the Material icons and Hugeicons
+  (and the app icon's "24" in Inter Bold, `digits_24.png`, which build.sh
+  takes as the render's stamp) to PNGs via `flutter test`; the app tints
+  and draws them (`NCGlyphs drawIcon`). Add an icon there when the panel
+  needs a new one. The clock itself is drawn with the bundled Inter TTFs
+  (FaceView.m: Bold with tabular figures via a UIFontDescriptor feature,
+  each glyph centred in its slot; every line is placed by its baseline,
+  since UIKit's line box is taller than Flutter's `height: 1.0` one), in
+  `NCClockColor`, which matches `_clockColor`. Until 28 Oct 2026 it drew
+  pre-rendered Bungee Tint PNGs — iOS 10 can't draw colour fonts.
 - Toolchain tricks (all in build.sh): the iOS 10.3 SDK from theos/sdks in
   `~/Library/Developer/LegacySDKs`, patched by `ipad/tool/fix_sdk.py`
   (simulator archs out of the .tbd stubs, armv7 objc_msgSend_stret in);

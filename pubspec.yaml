@@ -71,31 +71,8 @@ flutter:
     - assets/images/
 
   fonts:
-    # The clock's time, date and temperature — Bungee Tint, a two-colour
-    # font. Flutter can't pick a font palette, so each is the font with our
-    # own (fill, inline) pair in palette 0, one per sky (_clockFont).
-    - family: BungeeTintMorning
-      fonts:
-        - asset: fonts/BungeeTint-Morning.ttf
-    - family: BungeeTintDay
-      fonts:
-        - asset: fonts/BungeeTint-Day.ttf
-    - family: BungeeTintEvening
-      fonts:
-        - asset: fonts/BungeeTint-Evening.ttf
-    - family: BungeeTintRain
-      fonts:
-        - asset: fonts/BungeeTint-Rain.ttf
-    - family: BungeeTintDark
-      fonts:
-        - asset: fonts/BungeeTint-Dark.ttf
-    - family: BungeeTintDarkRain
-      fonts:
-        - asset: fonts/BungeeTint-DarkRain.ttf
-    - family: BungeeTintNight
-      fonts:
-        - asset: fonts/BungeeTint-Night.ttf
-    # Everything else — the date, the dashboard's labels and readouts.
+    # Inter for everything: the clock (Bold, tabular figures), the date and
+    # temperature, and the dashboard's labels and readouts.
     - family: Inter
       fonts:
         - asset: fonts/Inter-Light.ttf
