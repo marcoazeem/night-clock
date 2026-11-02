@@ -307,8 +307,11 @@ app builds fine but the lights panel silently disappears.
   "This bill ≈ MVR …", and the home card's bill graph — the user asked
   for one room, not all, and the graph "just like on the home screen"
   (the card's graph was lifted into `NCDrawEnergyGraph` / `NCEnergyPoints`
-  / `NCEnergyXs` in Panel.m, shared by both; no touch on the face's copy).
-  The face fits in the room left above that strip.
+  / `NCEnergyXs` in Panel.m, shared by both; no touch on the face's copy),
+  all in the same frosted card as the home page's (`NCFaceEnergyCard`: a
+  dark blur view under an "ink" view drawing `NCDrawCard` + rows + graph,
+  since a view's own drawing sits under its subviews; frost fades out in
+  standby). The face fits in the room left above that card.
 - Locked rooms: `ROOM_PINS` in lights.json (`"Room=1234"`; the
   code stays out of the public repos). Opening one from the home page shows
   a passcode pad in the panel's place (`PinPad` / `NCPinView`): dots and a
