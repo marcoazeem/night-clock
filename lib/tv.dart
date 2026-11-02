@@ -285,9 +285,18 @@ class AndroidTvBox {
   AndroidTvBox(this.name, this.host, [this.mac]);
   final String name;
   final String host;
-  final String? mac;
+
+  /// The MAC for Wake-on-LAN, 12 hex digits: from the config, or learned
+  /// from the box itself the first time it answers over ADB ([_learnMac]);
+  /// the app keeps a learned one through [onMacLearned].
+  String? mac;
+  void Function(String mac)? onMacLearned;
 
   bool get canWake => mac != null;
+
+  /// When the last Wake-on-LAN went out: the box boots for a while (off
+  /// the network until it's up), so the panel holds "On" meanwhile.
+  DateTime? wokeAt;
 
   /// True while the box's "Allow debugging?" prompt is waiting for the
   /// user, so the panel can say so at once rather than after the timeout.
@@ -338,26 +347,57 @@ class AndroidTvBox {
 
   Future<bool> isOn(AdbKey key) async {
     try {
-      return (await _shell(
-        key,
-        'dumpsys power | grep mWakefulness=',
-      )).contains('Awake');
+      final out = await _shell(key, 'dumpsys power | grep mWakefulness=');
+      if (mac == null) await _learnMac(key);
+      return out.contains('Awake');
     } on LightException catch (e) {
       if (e.message.contains('unreachable')) return false; // asleep
       rethrow;
     }
   }
 
-  /// Off: the sleep key. On: Wake-on-LAN when there's a MAC; otherwise the
-  /// wake key — which works on TVs that keep their network up in standby
-  /// (a TCL does), and throws for a box that dropped off the network.
+  /// The MAC of the interface carrying [host] (wlan0 or eth0), read once
+  /// the box answers: a Wake-on-LAN later needs it, and nobody wants to
+  /// type it into lights.json.
+  Future<void> _learnMac(AdbKey key) async {
+    try {
+      final out = await _shell(
+        key,
+        "i=\$(ip -o -4 addr show 2>/dev/null | grep -F ' $host/' | tr -s ' ' "
+        "| cut -d' ' -f2 | head -n1); "
+        'cat /sys/class/net/\${i:-wlan0}/address 2>/dev/null '
+        '|| cat /sys/class/net/eth0/address',
+      );
+      final found = RegExp(
+        r'([0-9a-f]{2}:){5}[0-9a-f]{2}',
+        caseSensitive: false,
+      ).firstMatch(out)?[0]?.toLowerCase().replaceAll(':', '');
+      if (found == null || found == '000000000000') return;
+      mac = found;
+      onMacLearned?.call(found);
+    } on LightException {
+      // Next time it answers.
+    }
+  }
+
+  /// Off: the sleep key. On: Wake-on-LAN with a MAC (for a box that's
+  /// dropped off the network) and the wake key (for a TV that keeps its
+  /// network up in standby, as a TCL does) — either is harmless when the
+  /// other applies. Throws only with no MAC and nothing answering.
   Future<void> setPower(AdbKey key, bool on) async {
     if (!on) {
       await _shell(key, 'input keyevent KEYCODE_SLEEP');
-    } else if (mac != null) {
+      return;
+    }
+    if (mac != null) {
       await wakeOnLan(name, host, mac!);
-    } else {
+      wokeAt = DateTime.now();
+    }
+    try {
       await _shell(key, 'input keyevent KEYCODE_WAKEUP');
+    } on LightException catch (e) {
+      if (mac == null || !e.message.contains('unreachable')) rethrow;
+      // Off the network: the magic packet is on its way.
     }
   }
 

@@ -307,8 +307,9 @@ app builds fine but the lights panel silently disappears.
   after dark, like the others.
 - TV card: a Hisense on its own gets the wide button; an Android TV on its
   own (Haam's TCL) gets the wide button plus volume over ADB
-  (`KEYCODE_VOLUME_*`). Android TVs without a MAC try `KEYCODE_WAKEUP` to
-  turn on (a TCL keeps ADB up in standby); only if that fails does it say
+  (`KEYCODE_VOLUME_*`). On sends `KEYCODE_WAKEUP` (a TCL keeps ADB up in
+  standby) and, with a MAC — learned from the TV once it has answered,
+  see the Beyond TV box — Wake-on-LAN too; only with neither does it say
   "Use the remote to turn on".
 - iPad: the same in Panel.m (`NCRoom`, `NCConfiguredRooms`, `NCHomeView`,
   `NCPanelView initWithRoom:`) and ClockViewController (`showRoom:`,
@@ -412,9 +413,19 @@ app builds fine but the lights panel silently disappears.
   user accepts on the TV. State: `dumpsys power` mWakefulness; off:
   `input keyevent KEYCODE_SLEEP` (works). Asleep, the box drops off the
   network (port 5555 closes), so unreachable reads as Off and it can't be
-  woken over ADB. On needs Wake-on-LAN to its MAC (`BEYOND_TV=Name=IP/MAC`,
-  untested whether this box supports it); without a MAC, tapping On says
-  "Use the remote to turn on". The user is fine with off-only for now. One command at a time
+  woken over ADB. On is Wake-on-LAN to its MAC — **learned from the box
+  itself** (3 Nov 2026, the user asked for TVs to switch on from the
+  dashboard): the first time a box answers over ADB, `_learnMac` reads the
+  MAC of the interface carrying its IP (`ip -o -4 addr show` → wlan0/eth0
+  → `/sys/class/net/<if>/address`) and the app keeps it (prefs
+  `mac:<host>`; the iPad in NSUserDefaults); `BEYOND_TV=Name=IP/MAC` still
+  overrides. On then sends the magic packet *and* `KEYCODE_WAKEUP`
+  (harmless whichever applies), records `wokeAt`, and the card holds "On"
+  for `_bootTime` (45 s) before polling again — if it's still off then,
+  "Didn't wake — use the remote" flashes. Whether the Beyond box and
+  Haam's TCL actually wake on LAN is untested (they need their network
+  standby / Wake-on-LAN setting on); without a MAC tapping On still says
+  "Use the remote to turn on". One command at a time
   per box so a waiting approval prompt isn't stacked.
 - Config `BEYOND_TV=Name=IP`. UI (the user's layout): in the TV card, the
   box's big power button first (`_boxBlue`), then the Hisense TV's small

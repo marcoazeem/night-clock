@@ -360,6 +360,12 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
       _dim = (_prefs!.getDouble('dim') ?? 0.55).clamp(0.0, 1.0);
     });
     _applyBrightness();
+    // The TV boxes' MACs, learned from the boxes themselves (see
+    // AndroidTvBox): Wake-on-LAN needs them once a box is off the network.
+    for (final box in _rooms.expand((r) => r.boxes)) {
+      box.mac ??= _prefs!.getString('mac:${box.host}');
+      box.onMacLearned = (mac) => _prefs?.setString('mac:${box.host}', mac);
+    }
   }
 
   void _saveSettings() {
@@ -4611,6 +4617,10 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
   /// down (or come up), so polls inside [_tvSettle] would undo the tap.
   final _tvSwitched = <HisenseTv, DateTime>{};
   static const _tvSettle = Duration(seconds: 20);
+
+  /// How long a box gets to boot after a Wake-on-LAN before a poll may
+  /// read it as off again.
+  static const _bootTime = Duration(seconds: 45);
   Timer? _poll;
 
   @override
@@ -4663,17 +4673,26 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
 
   Future<void> _refreshBox(AndroidTvBox box) async {
     final switched = _boxSwitched[box];
+    final now = DateTime.now();
     if (switched != null &&
-        DateTime.now().difference(switched) < const Duration(seconds: 6)) {
+        now.difference(switched) < const Duration(seconds: 6)) {
       return;
     }
+    // Booting after a Wake-on-LAN: off the network until it's up.
+    final woke = box.wokeAt;
+    if (woke != null && now.difference(woke) < _bootTime) return;
     try {
       final on = await box.isOn(await _loadAdbKey());
-      if (mounted) {
-        setState(() {
-          _boxOn[box] = on;
-          _boxProblem.remove(box);
-        });
+      if (!mounted) return;
+      setState(() {
+        _boxOn[box] = on;
+        _boxProblem.remove(box);
+      });
+      if (woke != null) {
+        box.wokeAt = null;
+        // Its boot time is up and it's still not there: the magic packet
+        // didn't reach it, or it can't wake on LAN.
+        if (!on) _flashBoxProblem(box, "Didn't wake — use the remote");
       }
     } catch (e) {
       if (mounted) {
@@ -4698,19 +4717,23 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
       _boxSwitched.remove(box);
       if (on && !box.canWake) {
         // Asleep and off the network: only its remote wakes it.
-        setState(() {
-          _boxOn[box] = false;
-          _boxProblem[box] = 'Use the remote to turn on';
-        });
-        Future.delayed(const Duration(seconds: 4), () {
-          if (mounted && _boxProblem[box] == 'Use the remote to turn on') {
-            setState(() => _boxProblem.remove(box));
-          }
-        });
+        setState(() => _boxOn[box] = false);
+        _flashBoxProblem(box, 'Use the remote to turn on');
         return;
       }
       _refreshBox(box);
     }
+  }
+
+  /// Shows [text] under the box's button for 4 s.
+  void _flashBoxProblem(AndroidTvBox box, String text) {
+    if (!mounted) return;
+    setState(() => _boxProblem[box] = text);
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted && _boxProblem[box] == text) {
+        setState(() => _boxProblem.remove(box));
+      }
+    });
   }
 
   Future<void> _refreshTv(HisenseTv tv) async {
