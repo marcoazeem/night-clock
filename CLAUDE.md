@@ -300,10 +300,14 @@ app builds fine but the lights panel silently disappears.
   the phone shows the draw now and "≈ MVR" (the projected bill) in two
   small Inter lines beside the temperature (standing) or under it (on its
   side) — `_weatherCard` reads `EnergyTracker.draw` / `projectedMvr`, and
-  the clock state listens to the tracker; the iPad draws a table under the
-  weather (`NCFaceView.energy` / `roomNames`, `energyRows` in FaceView.m):
-  each room's watts (`roomWatts` on both trackers — the room's own
-  devices; the baseline is "Other"), a rule, Total, "This bill ≈ MVR …".
+  the clock state listens to the tracker; the iPad draws, under the
+  weather (`NCFaceView.energy` / `roomNames` / `room`, `energyRows` in
+  FaceView.m), the **room on screen's** watts (`roomWatts` on both
+  trackers — the room's own devices; "Whole house" on the home page),
+  "This bill ≈ MVR …", and the home card's bill graph — the user asked
+  for one room, not all, and the graph "just like on the home screen"
+  (the card's graph was lifted into `NCDrawEnergyGraph` / `NCEnergyPoints`
+  / `NCEnergyXs` in Panel.m, shared by both; no touch on the face's copy).
   The face fits in the room left above that strip.
 - Locked rooms: `ROOM_PINS` in lights.json (`"Room=1234"`; the
   code stays out of the public repos). Opening one from the home page shows
