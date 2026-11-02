@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lottie/lottie.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -402,18 +403,37 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         : const bool.fromEnvironment('FORCE_CLEAR')
         ? 'clear-${w.isDay ? 'day' : 'night'}'
         : w.icon;
-    Widget icon = SvgPicture.asset(
-      'assets/weather/$name.svg',
-      width: size,
-      height: size,
-    );
-    // Night mode: towards the dashboard's red, like everything else.
-    if (night) {
-      icon = ColorFiltered(
-        colorFilter: ColorFilter.mode(_hue(_white, true), BlendMode.modulate),
-        child: icon,
-      );
-    }
+    // Animated (Meteocons' Lottie files, the same art) until night mode;
+    // then a still SVG pulled towards the dashboard's red — the user asked
+    // for the animation to stop once the red tint is on.
+    final Widget icon = night
+        ? ColorFiltered(
+            colorFilter: ColorFilter.mode(
+              _hue(_white, true),
+              BlendMode.modulate,
+            ),
+            child: SvgPicture.asset(
+              'assets/weather/$name.svg',
+              width: size,
+              height: size,
+            ),
+          )
+        // Its own layer, at 24 fps, so the clock and the glass cards
+        // around it don't repaint with every frame.
+        : RepaintBoundary(
+            child: Lottie.asset(
+              'assets/weather/$name.json',
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+              frameRate: const FrameRate(24),
+              errorBuilder: (_, _, _) => SvgPicture.asset(
+                'assets/weather/$name.svg',
+                width: size,
+                height: size,
+              ),
+            ),
+          );
     // No card behind it. The clock's font, in its colour.
     final color = _clockColor(_now, night: night, raining: _raining);
     if (inline) {

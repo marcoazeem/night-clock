@@ -204,7 +204,9 @@ Andersson), SIL OFL, likewise: everything else, in Regular and Medium.
 ## Weather icons
 
 [Meteocons](https://github.com/basmilius/weather-icons) by Bas Milius,
-MIT licence (`assets/weather/LICENSE`).
+MIT licence (`assets/weather/LICENSE`) — the fill set as SVGs (stills) and
+as the animated Lottie files from `@meteocons/lottie`, played with the
+[lottie](https://pub.dev/packages/lottie) package.
 
 ## Lightbox
 

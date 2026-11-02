@@ -491,10 +491,19 @@ app builds fine but the lights panel silently disappears.
   in weather.dart from Open-Meteo's WMO `weather_code` and `is_day`:
   clear, partly cloudy, overcast, fog, drizzle, rain, showers,
   thunderstorms, snow, day/night where they differ (the sky and clock
-  colour still only know rain / not). Night mode multiplies it towards
-  red. Drawn ~1.3× the old Material size (the art fills ~70% of its box).
-  iPad: glyphs_test.dart renders them to full-colour `wx_<name>.png`,
-  FaceView draws `NCWeather.icon` (red-tinted copy cached for night).
+  colour still only know rain / not). **Animated** (28 Oct 2026): outside
+  night mode the card plays Meteocons' Lottie file of the same icon
+  (`assets/weather/<name>.json`, from the `@meteocons/lottie` npm package;
+  the `lottie` package, 24 fps in its own RepaintBoundary); in night mode
+  (23–06) it's the still SVG multiplied towards red — the user asked for
+  the animation to stop once the red tint is on. Drawn ~1.3× the old
+  Material size (the art fills ~70% of its box).
+  iPad: glyphs_test.dart renders the SVGs to full-colour `wx_<name>.png`
+  (the night still, red-tinted copy cached); by day FaceView keeps a
+  `LOTAnimationView` subview over the icon's box — lottie-ios 2.5.3, the
+  last Objective-C release (Apache 2.0), which build.sh fetches from
+  GitHub once and builds into `build/liblottie.a` with the app's flags
+  (it compiles clean for armv7/iOS 10; all 13 icons were tested on Haam).
   Before: Material sun (06–18) / moon / cloud with drops,
   the temp now, and today's low ~ high (Open-Meteo daily min/max). Standing, it's one small line (icon then temperature) under
   the date, so the clock gets the full width — beside it the (then Bungee)

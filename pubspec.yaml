@@ -43,6 +43,7 @@ dependencies:
   hugeicons: 1.2.0
   # Meteocons weather icons (assets/weather).
   flutter_svg: ^2.3.0
+  lottie: ^3.7.0
 
 dev_dependencies:
   flutter_test:
