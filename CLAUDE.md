@@ -296,7 +296,15 @@ app builds fine but the lights panel silently disappears.
   projection a glowing hollow point "now", dashed on from the last bill;
   touch/drag for "14 Oct bill · 34.8 kWh/day · 1,045 kWh · MVR 2,890" —
   the user asked for a line graph), and the draw split ACs / Lights /
-  Screens / Other.
+  Screens / Other. **On the clock face too (3 Nov 2026, the user asked)**:
+  the phone shows the draw now and "≈ MVR" (the projected bill) in two
+  small Inter lines beside the temperature (standing) or under it (on its
+  side) — `_weatherCard` reads `EnergyTracker.draw` / `projectedMvr`, and
+  the clock state listens to the tracker; the iPad draws a table under the
+  weather (`NCFaceView.energy` / `roomNames`, `energyRows` in FaceView.m):
+  each room's watts (`roomWatts` on both trackers — the room's own
+  devices; the baseline is "Other"), a rule, Total, "This bill ≈ MVR …".
+  The face fits in the room left above that strip.
 - Locked rooms: `ROOM_PINS` in lights.json (`"Room=1234"`; the
   code stays out of the public repos). Opening one from the home page shows
   a passcode pad in the panel's place (`PinPad` / `NCPinView`): dots and a

@@ -266,6 +266,8 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WakelockPlus.enable().catchError((_) {});
+    // The face shows the draw and the bill estimate beside the weather.
+    _energy.addListener(_onEnergy);
     // The brightness override needs an attached activity, which isn't there
     // yet during initState — wait for the first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -278,6 +280,10 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     Future.delayed(const Duration(seconds: 8), () {
       if (mounted) setState(() => _showHint = false);
     });
+  }
+
+  void _onEnergy() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _refreshWeather() async {
@@ -398,6 +404,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   void dispose() {
     _idle?.cancel();
     _standbyTimer?.cancel();
+    _energy.removeListener(_onEnergy);
     WidgetsBinding.instance.removeObserver(this);
     _stopTimers();
     _resetBrightness();
@@ -468,45 +475,60 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     }
     // No card behind it. The clock's font, in its colour.
     final color = _clockColor(_now, night: night, raining: _raining);
+    final tempStyle = TextStyle(
+      fontFamily: _clockFamily,
+      fontWeight: FontWeight.w700,
+      color: color,
+      fontSize: d * (inline ? 0.26 : 0.42),
+      height: 1,
+    );
+    // The house's draw now and this bill's estimate (the user wanted the
+    // bill by the temperature, 3 Nov 2026) — two short lines in Inter, in
+    // the clock's colour, standing beside the temperature or under it.
+    final watts = _energy.draw?.total;
+    final bill = _energy.enabled ? _energy.projectedMvr : null;
+    final energy = watts == null
+        ? null
+        : Column(
+            crossAxisAlignment: inline
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final line in [
+                _kw(watts),
+                if (bill != null) '≈ MVR ${_mvr(bill)}',
+              ])
+                Text(
+                  line,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: color.withValues(alpha: 0.85),
+                    fontSize: d * (inline ? 0.15 : 0.2),
+                    height: 1.2,
+                  ),
+                ),
+            ],
+          );
     if (inline) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           icon,
           SizedBox(width: d * 0.08),
-          Text(
-            '${w.temp}°C',
-            style: TextStyle(
-              fontFamily: _clockFamily,
-              fontWeight: FontWeight.w700,
-              color: color,
-              fontSize: d * 0.26,
-              height: 1,
-            ),
-          ),
+          Text('${w.temp}°C', style: tempStyle),
+          if (energy != null) ...[SizedBox(width: d * 0.16), energy],
         ],
       );
     }
-    return SizedBox(
-      width: d * 1.3,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          icon,
-          SizedBox(height: d * 0.04),
-          Text(
-            '${w.temp}°C',
-            style: TextStyle(
-              fontFamily: _clockFamily,
-              fontWeight: FontWeight.w700,
-              color: color,
-              fontSize: d * 0.42,
-              height: 1.05,
-            ),
-          ),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        icon,
+        SizedBox(height: d * 0.12),
+        Text('${w.temp}°C', style: tempStyle),
+        if (energy != null) ...[SizedBox(height: d * 0.1), energy],
+      ],
     );
   }
 
@@ -3617,8 +3639,17 @@ class EnergyTracker extends ChangeNotifier {
 
   /// What's on in each room (by [rooms]' order), for the house view.
   List<RoomState>? roomStates;
+
+  /// Each room's draw now, in watts (by [rooms]' order) — the devices the
+  /// dashboard can see; the baseline isn't any room's.
+  List<double>? roomWatts;
   Draw? draw;
   DateTime now = DateTime.now();
+
+  /// This billing period's projected bill in MVR, once polled.
+  double? get projectedMvr => draw == null
+      ? null
+      : billMvr(meter.projectedKwh(now), meter.periodDays(now));
 
   /// The card shows only with bills to go on.
   bool get enabled => meter.bills.isNotEmpty;
@@ -3689,6 +3720,21 @@ class EnergyTracker extends ChangeNotifier {
               r.tvs.where((t) => tvOf[t] == true).length +
               r.boxes.where((b) => boxOf[b] == true).length,
         ),
+    ];
+    roomWatts = [
+      for (final r in rooms)
+        r.acs.fold(0.0, (w, a) {
+              final s = acOf[a];
+              return s == null
+                  ? w
+                  : w + acWatts(_btu[a.name.toLowerCase()] ?? 12000, s);
+            }) +
+            r.lights.fold(0.0, (w, l) {
+              final s = lightOf[l];
+              return s == null ? w : w + lightWatts(s.on, s.brightness);
+            }) +
+            r.tvs.where((t) => tvOf[t] == true).length * tvWatts +
+            r.boxes.where((b) => boxOf[b] == true).length * boxWatts,
     ];
     now = DateTime.now();
     draw = Draw(
