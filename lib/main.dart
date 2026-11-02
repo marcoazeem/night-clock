@@ -224,8 +224,23 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   Timer? _idle;
   static const _idleReturn = Duration(minutes: 2);
 
-  /// Any touch restarts the walk back to this device's own room.
+  /// Standby (the user asked, Nov 2026): untouched for [_standbyAfter], the
+  /// whole dashboard goes true black — no video, no sky, flat outlined
+  /// cards, the weather icon still — so the OLED switches most of its
+  /// pixels off. Every button still works; the first touch brings the full
+  /// look back.
+  bool _standby = false;
+  Timer? _standbyTimer;
+  static const _standbyAfter = Duration(minutes: 5);
+
+  /// Any touch restarts the count to standby (and ends it), and the walk
+  /// back to this device's own room.
   void _touched() {
+    _standbyTimer?.cancel();
+    _standbyTimer = Timer(_standbyAfter, () {
+      if (mounted && !_standby) setState(() => _standby = true);
+    });
+    if (_standby) setState(() => _standby = false);
     if (_rooms.length < 2) return;
     _idle?.cancel();
     _idle = Timer(_idleReturn, () {
@@ -258,6 +273,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     });
     _loadSettings();
     _startTimers();
+    _touched(); // Starts the count to standby.
 
     Future.delayed(const Duration(seconds: 8), () {
       if (mounted) setState(() => _showHint = false);
@@ -323,10 +339,12 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
       _startTimers();
       // Android drops the window override on backgrounding; re-assert it.
       _applyBrightness(force: true);
+      _touched(); // Coming back counts as a touch: full look, new count.
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       // Not visible — stop burning CPU on clock updates.
       _stopTimers();
+      _standbyTimer?.cancel();
       _resetBrightness();
     }
   }
@@ -373,6 +391,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     _idle?.cancel();
+    _standbyTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _stopTimers();
     _resetBrightness();
@@ -394,7 +413,13 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   /// The weather: icon over temperature beside the clock, or [inline] —
   /// icon then temperature on one small line under the date (standing, so
   /// the clock gets the full width).
-  Widget _weatherCard(Weather w, double d, bool night, {bool inline = false}) {
+  Widget _weatherCard(
+    Weather w,
+    double d,
+    bool night, {
+    bool inline = false,
+    bool still = false,
+  }) {
     // Meteocons (Bas Milius, MIT) — the user picked them over Material,
     // Oct 2026. Their art fills ~70% of the 64-unit box, hence the size up.
     final size = d * (inline ? 0.4 : 0.6);
@@ -403,20 +428,15 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         : const bool.fromEnvironment('FORCE_CLEAR')
         ? 'clear-${w.isDay ? 'day' : 'night'}'
         : w.icon;
-    // Animated (Meteocons' Lottie files, the same art) until night mode;
-    // then a still SVG pulled towards the dashboard's red — the user asked
-    // for the animation to stop once the red tint is on.
-    final Widget icon = night
-        ? ColorFiltered(
-            colorFilter: ColorFilter.mode(
-              _hue(_white, true),
-              BlendMode.modulate,
-            ),
-            child: SvgPicture.asset(
-              'assets/weather/$name.svg',
-              width: size,
-              height: size,
-            ),
+    // Animated (Meteocons' Lottie files, the same art), except [still]
+    // (standby) and in night mode, where it's the still SVG pulled towards
+    // the dashboard's red — the user asked for the animation to stop once
+    // the red tint is on.
+    Widget icon = night || still
+        ? SvgPicture.asset(
+            'assets/weather/$name.svg',
+            width: size,
+            height: size,
           )
         // Its own layer, at 24 fps, so the clock and the glass cards
         // around it don't repaint with every frame.
@@ -434,6 +454,12 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               ),
             ),
           );
+    if (night) {
+      icon = ColorFiltered(
+        colorFilter: ColorFilter.mode(_hue(_white, true), BlendMode.modulate),
+        child: icon,
+      );
+    }
     // No card behind it. The clock's font, in its colour.
     final color = _clockColor(_now, night: night, raining: _raining);
     if (inline) {
@@ -704,7 +730,13 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               // the clock keeps the whole width.
               final card = weather == null
                   ? null
-                  : _weatherCard(weather, digitSize, night, inline: !landscape);
+                  : _weatherCard(
+                      weather,
+                      digitSize,
+                      night,
+                      inline: !landscape,
+                      still: _standby,
+                    );
               final faceAndWeather = card == null
                   ? face
                   : Column(
@@ -716,171 +748,179 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                       ],
                     );
 
-              return Opacity(
-                opacity: _pixelOpacity,
-                child: Stack(
-                  children: [
-                    // Soft and edgeless, so it doesn't drift with the rest.
-                    Positioned.fill(
-                      child: _Backdrop(
-                        now: _now,
-                        night: night,
-                        raining: _raining,
-                        drift: Offset(_drift.dx * driftX, _drift.dy * driftY),
-                        home: _room == null && _rooms.length > 1,
+              return _Look(
+                standby: _standby,
+                child: Opacity(
+                  opacity: _pixelOpacity,
+                  child: Stack(
+                    children: [
+                      // Soft and edgeless, so it doesn't drift with the rest.
+                      Positioned.fill(
+                        child: _Backdrop(
+                          now: _now,
+                          night: night,
+                          raining: _raining,
+                          drift: Offset(_drift.dx * driftX, _drift.dy * driftY),
+                          home: _room == null && _rooms.length > 1,
+                          standby: _standby,
+                        ),
                       ),
-                    ),
-                    // A plain jump, once a minute: a 20 s glide redrew the whole
-                    // screen at 60 fps for a third of every minute.
-                    Transform.translate(
-                      offset: Offset(_drift.dx * driftX, _drift.dy * driftY),
-                      child: Stack(
-                        children: [
-                          // Inset by the drift range so the face never wanders
-                          // off the panel edge.
-                          Positioned.fill(
-                            child: Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                driftX + 4,
-                                driftY + 4,
-                                driftX + 4,
-                                driftY + 4,
-                              ),
-                              // The dashboard: the clock takes what the lights
-                              // leave — under it standing, beside it on its side.
-                              child: Flex(
-                                direction: landscape
-                                    ? Axis.horizontal
-                                    : Axis.vertical,
-                                children: [
-                                  Expanded(
-                                    child: FractionallySizedBox(
-                                      // Standing, 0.82: wider runs the top-right
-                                      // digit into a dark patch on this OLED.
-                                      widthFactor: landscape
-                                          ? _faceScale
-                                          : 0.82,
-                                      heightFactor: landscape ? _faceScale : 1,
-                                      // scaleDown fits the stack to that box: the time
-                                      // is what binds, so this fills it without ever
-                                      // wrapping or clipping.
-                                      child: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: faceAndWeather,
+                      // A plain jump, once a minute: a 20 s glide redrew the whole
+                      // screen at 60 fps for a third of every minute.
+                      Transform.translate(
+                        offset: Offset(_drift.dx * driftX, _drift.dy * driftY),
+                        child: Stack(
+                          children: [
+                            // Inset by the drift range so the face never wanders
+                            // off the panel edge.
+                            Positioned.fill(
+                              child: Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  driftX + 4,
+                                  driftY + 4,
+                                  driftX + 4,
+                                  driftY + 4,
+                                ),
+                                // The dashboard: the clock takes what the lights
+                                // leave — under it standing, beside it on its side.
+                                child: Flex(
+                                  direction: landscape
+                                      ? Axis.horizontal
+                                      : Axis.vertical,
+                                  children: [
+                                    Expanded(
+                                      child: FractionallySizedBox(
+                                        // Standing, 0.82: wider runs the top-right
+                                        // digit into a dark patch on this OLED.
+                                        widthFactor: landscape
+                                            ? _faceScale
+                                            : 0.82,
+                                        heightFactor: landscape
+                                            ? _faceScale
+                                            : 1,
+                                        // scaleDown fits the stack to that box: the time
+                                        // is what binds, so this fills it without ever
+                                        // wrapping or clipping.
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: faceAndWeather,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  if (_rooms.length > 1 ||
-                                      !_rooms.first.isEmpty)
-                                    Padding(
-                                      padding: landscape
-                                          ? EdgeInsets.only(
-                                              left: barSpan * 0.04,
-                                            )
-                                          : EdgeInsets.only(
-                                              top: barSpan * 0.04,
+                                    if (_rooms.length > 1 ||
+                                        !_rooms.first.isEmpty)
+                                      Padding(
+                                        padding: landscape
+                                            ? EdgeInsets.only(
+                                                left: barSpan * 0.04,
+                                              )
+                                            : EdgeInsets.only(
+                                                top: barSpan * 0.04,
+                                              ),
+                                        // Scrolls once there's more than fits. On
+                                        // its side the row bounds its height;
+                                        // standing, it leaves the clock at least
+                                        // 0.4 of the width in height (full width
+                                        // needs ~0.45, so it gives a little before
+                                        // the panel has to scroll).
+                                        child: ConstrainedBox(
+                                          constraints: BoxConstraints(
+                                            maxHeight: landscape
+                                                ? double.infinity
+                                                : max(
+                                                    0.0,
+                                                    h -
+                                                        2 * (driftY + 4) -
+                                                        barSpan * 0.04 -
+                                                        (w - 2 * (driftX + 4)) *
+                                                            0.4,
+                                                  ),
+                                          ),
+                                          child: SingleChildScrollView(
+                                            child: _panel(
+                                              night: night,
+                                              width: landscape
+                                                  ? barSpan * 0.034 * 26
+                                                  : w - 2 * (driftX + 4),
+                                              unit: barSpan * 0.034,
                                             ),
-                                      // Scrolls once there's more than fits. On
-                                      // its side the row bounds its height;
-                                      // standing, it leaves the clock at least
-                                      // 0.4 of the width in height (full width
-                                      // needs ~0.45, so it gives a little before
-                                      // the panel has to scroll).
-                                      child: ConstrainedBox(
-                                        constraints: BoxConstraints(
-                                          maxHeight: landscape
-                                              ? double.infinity
-                                              : max(
-                                                  0.0,
-                                                  h -
-                                                      2 * (driftY + 4) -
-                                                      barSpan * 0.04 -
-                                                      (w - 2 * (driftX + 4)) *
-                                                          0.4,
-                                                ),
-                                        ),
-                                        child: SingleChildScrollView(
-                                          child: _panel(
-                                            night: night,
-                                            width: landscape
-                                                ? barSpan * 0.034 * 26
-                                                : w - 2 * (driftX + 4),
-                                            unit: barSpan * 0.034,
                                           ),
                                         ),
                                       ),
-                                    ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          if (_dimFrom != null)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              top: barSpan * 0.08,
-                              child: Center(
-                                child: Container(
+                            if (_dimFrom != null)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                top: barSpan * 0.08,
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: _surfaceEdge),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.brightness_6_rounded,
+                                          size: 18,
+                                          color: _white,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '${(_dim * 100).round()}%',
+                                          style: const TextStyle(
+                                            color: _white,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            if (_showHint)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                // Landscape leaves no headroom over the digits, so
+                                // the hint sits right at the edge and on one line.
+                                top: landscape ? 4.0 : barSpan * 0.08,
+                                child: Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
-                                    vertical: 8,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.6),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: _surfaceEdge),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.brightness_6_rounded,
-                                        size: 18,
-                                        color: _white,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '${(_dim * 100).round()}%',
-                                        style: const TextStyle(
-                                          color: _white,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w500,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      'press & hold, then slide up / down to dim',
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.35,
                                         ),
+                                        fontSize: 13,
                                       ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (_showHint)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              // Landscape leaves no headroom over the digits, so
-                              // the hint sits right at the edge and on one line.
-                              top: landscape ? 4.0 : barSpan * 0.08,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    'press & hold, then slide up / down to dim',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.35,
-                                      ),
-                                      fontSize: 13,
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },
@@ -977,6 +1017,7 @@ class _Backdrop extends StatelessWidget {
     required this.raining,
     required this.drift,
     this.home = false,
+    this.standby = false,
   });
   final DateTime now;
   final bool night;
@@ -986,6 +1027,9 @@ class _Backdrop extends StatelessWidget {
   /// The home page is open: it has its own clip (the forest), whatever
   /// the time or weather.
   final bool home;
+
+  /// Standby: true black, nothing playing (the switcher fades to it).
+  final bool standby;
 
   @override
   Widget build(BuildContext context) {
@@ -1049,35 +1093,37 @@ class _Backdrop extends StatelessWidget {
     );
     return AnimatedSwitcher(
       duration: const Duration(seconds: 3),
-      child: Stack(
-        key: ValueKey('$scene/$clip'),
-        children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: sky,
-                ),
-              ),
-            ),
-          ),
-          ...glows,
-          Positioned.fill(
-            child: const bool.fromEnvironment('NO_VIDEO')
-                ? drawnSky
-                // The user's own clips play behind everything, falling
-                // back to the drawn sky if one can't load.
-                : _VideoSky(
-                    asset: 'assets/video/$clip.mp4',
-                    fallback: drawnSky,
-                    dim: night || (dark && (raining || home)),
-                    veryDark: dark && raining,
+      child: standby
+          ? const ColoredBox(key: ValueKey('standby'), color: Colors.black)
+          : Stack(
+              key: ValueKey('$scene/$clip'),
+              children: [
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: sky,
+                      ),
+                    ),
                   ),
-          ),
-        ],
-      ),
+                ),
+                ...glows,
+                Positioned.fill(
+                  child: const bool.fromEnvironment('NO_VIDEO')
+                      ? drawnSky
+                      // The user's own clips play behind everything, falling
+                      // back to the drawn sky if one can't load.
+                      : _VideoSky(
+                          asset: 'assets/video/$clip.mp4',
+                          fallback: drawnSky,
+                          dim: night || (dark && (raining || home)),
+                          veryDark: dark && raining,
+                        ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -1655,9 +1701,23 @@ class _SkyPainter extends CustomPainter {
       old.drift != drift;
 }
 
+/// The look the dashboard is in — standby (true black, flat cards) or the
+/// full glass look — read by the cards wherever they sit in the tree.
+class _Look extends InheritedWidget {
+  const _Look({required this.standby, required super.child});
+  final bool standby;
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_Look>()?.standby ?? false;
+
+  @override
+  bool updateShouldNotify(_Look old) => old.standby != standby;
+}
+
 /// A frosted-glass card in its device's [hue]: the backdrop blurred through
 /// it, a wash of the hue, a thin border that's brightest top-left and fades
-/// out, and a glow around it while [on]. [alert] turns the border red.
+/// out, and a glow around it while [on]. [alert] turns the border red. In
+/// standby ([_Look]) it's just the border on black.
 class _GlowCard extends StatelessWidget {
   const _GlowCard({
     required this.hue,
@@ -1684,13 +1744,14 @@ class _GlowCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = BorderRadius.circular(unit * 1.8);
+    final standby = _Look.of(context);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 400),
       width: width,
       height: height,
       decoration: BoxDecoration(
         borderRadius: r,
-        boxShadow: on
+        boxShadow: on && !standby
             ? [
                 BoxShadow(
                   color: hue.withValues(alpha: 0.28),
@@ -1715,20 +1776,22 @@ class _GlowCard extends StatelessWidget {
             duration: const Duration(milliseconds: 400),
             padding: EdgeInsets.all(unit * padding),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color.alphaBlend(
-                    hue.withValues(alpha: on ? 0.22 : 0.07),
-                    _white.withValues(alpha: 0.09),
-                  ),
-                  Color.alphaBlend(
-                    hue.withValues(alpha: on ? 0.06 : 0.0),
-                    _white.withValues(alpha: 0.035),
-                  ),
-                ],
-              ),
+              gradient: standby
+                  ? null
+                  : LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color.alphaBlend(
+                          hue.withValues(alpha: on ? 0.22 : 0.07),
+                          _white.withValues(alpha: 0.09),
+                        ),
+                        Color.alphaBlend(
+                          hue.withValues(alpha: on ? 0.06 : 0.0),
+                          _white.withValues(alpha: 0.035),
+                        ),
+                      ],
+                    ),
             ),
             child: child,
           ),

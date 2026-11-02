@@ -478,6 +478,26 @@ app builds fine but the lights panel silently disappears.
   (`HisenseTv.source()`, "HDMI 1").
 - Night mode (23:00–06:00): `_hue()` pulls every device colour 80% to
   `_nightRed`.
+- **Standby (3 Nov 2026)**: untouched for 5 min (`_standbyAfter`, counted
+  from the last pointer-down, app start or resume; `_touched`), the whole
+  dashboard goes true black — the user's "AMOLED style black" to save the
+  battery: `_Backdrop` crossfades (3 s) to a plain black box, which
+  disposes the video and the sky ticker; `_GlowCard` reads `_Look`
+  (an InheritedWidget around the screen) and drops its wash and glow,
+  leaving the border on black; the weather icon is the still SVG
+  (`still:`). Everything stays — clock, date, weather, every button (the
+  user wanted all the buttons, not a clock-only face) — and keeps working;
+  the first touch brings the full look back and restarts the count. The
+  room's 15 s poll carries on (the house poll does anyway). iPad: the
+  same in ClockViewController (`kStandbyAfter`, `setStandby:`):
+  `NCSkyView.standby` fades the sky to black over 1.5 s and pauses the
+  clip's player, `NCPanelPage.standby` fades the frost (UIVisualEffectView
+  blur) out and the tiles draw `drawCardStyle(…, flat)`, `NCFaceView`
+  stops the Lottie icon, and the backlight drops to `kStandbyBrightness`
+  (0.12) — an LCD doesn't care about black, so there it's the backlight
+  and the idle GPU that save power. Outside standby the iPad's backlight
+  is capped at `kMaxBrightness` 0.4 (the user asked for ~40% always; the
+  press-and-hold still dims below it).
 - Weather (lib/weather.dart): Open-Meteo, no key, every 15 min — the only
   internet call. `WEATHER_AT=lat,lon` in lights.json (Malé; the user is in
   the Maldives). Only rain vs not: WMO code ≥ 51 or precipitation > 0.1.
@@ -600,7 +620,15 @@ them by hand when the user wants both.
   from Xcode's `libclang_rt.cc_kext_ios.a`.
 - Signing: team D88J248KNQ (seastack) wildcard dev profile, which lists
   Haam; bundle id `mv.seastack.nightclock`. Install with `ideviceinstaller`
-  (Xcode can't see iOS 10 devices).
+  (Xcode can't see iOS 10 devices). build.sh picks the profile whose
+  *application-identifier* is `TEAM.*` — other apps' profiles carry that
+  string in their keychain groups too, and one signed the app with its
+  own entitlements once (Nov 2026: "invalid entitlements" on install).
+- The iOS 10.3 DeveloperDiskImage is kept in
+  `~/Library/Developer/LegacySDKs/iOS10.3-DDI/` (from
+  haikieu/xcode-developer-disk-image-all-platforms, `DeviceSupport/10.3.zip`;
+  it used to sit in the session scratchpad, which gets cleaned). Mount it
+  with `ideviceimagemounter` when `idevicedebug` asks — once per iPad boot.
 - Screenshots and launching: mount the iOS 10.3 DeveloperDiskImage
   (`ideviceimagemounter`, from a community archive) once per iPad boot,
   then `idevicescreenshot` and `idevicedebug --detach run
