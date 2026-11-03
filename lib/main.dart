@@ -485,7 +485,10 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     // The house's draw now and this bill's estimate (the user wanted the
     // bill by the temperature, 3 Nov 2026) — two short lines in Inter, in
     // the clock's colour, standing beside the temperature or under it.
-    final watts = _energy.draw?.total;
+    // Not on the home page: its energy card is right there (the user
+    // didn't want it twice).
+    final onHome = _room == null && _rooms.length > 1;
+    final watts = onHome ? null : _energy.draw?.total;
     final bill = _energy.enabled ? _energy.projectedMvr : null;
     final energy = watts == null
         ? null

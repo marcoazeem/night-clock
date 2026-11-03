@@ -299,7 +299,8 @@ app builds fine but the lights panel silently disappears.
   Screens / Other. **On the clock face too (3 Nov 2026, the user asked)**:
   the phone shows the draw now and "≈ MVR" (the projected bill) in two
   small Inter lines beside the temperature (standing) or under it (on its
-  side) — `_weatherCard` reads `EnergyTracker.draw` / `projectedMvr`, and
+  side), but not on the home page (its energy card is there; the user
+  didn't want it twice) — `_weatherCard` reads `EnergyTracker.draw` / `projectedMvr`, and
   the clock state listens to the tracker; the iPad draws, under the
   weather (`NCFaceView.energy` / `roomNames` / `room`, `energyRows` in
   FaceView.m), the **room on screen's** watts (`roomWatts` on both
