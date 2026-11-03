@@ -303,7 +303,8 @@ app builds fine but the lights panel silently disappears.
   the clock state listens to the tracker; the iPad draws, under the
   weather (`NCFaceView.energy` / `roomNames` / `room`, `energyRows` in
   FaceView.m), the **room on screen's** watts (`roomWatts` on both
-  trackers — the room's own devices; "Whole house" on the home page),
+  trackers — the room's own devices; nothing on the home page, which has
+  its own energy card — the user asked),
   "This bill ≈ MVR …", and the home card's bill graph — the user asked
   for one room, not all, and the graph "just like on the home screen"
   (the card's graph was lifted into `NCDrawEnergyGraph` / `NCEnergyPoints`
