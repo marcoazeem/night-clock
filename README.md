@@ -56,7 +56,7 @@ across launches. The whole display wanders within a ±20 × ±40 px region
 jumping to a new spot every minute, so no pixel holds a static image —
 AMOLED burn-in protection.
 
-After five minutes untouched the dashboard goes to **standby**: a true-black
+After 15 seconds untouched the dashboard goes to **standby**: a true-black
 screen with no video or sky and flat, outlined cards, so the OLED switches
 most of its pixels off. Everything stays on screen and keeps working; the
 first touch brings the full look back.

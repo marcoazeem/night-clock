@@ -506,7 +506,7 @@ app builds fine but the lights panel silently disappears.
   (`HisenseTv.source()`, "HDMI 1").
 - Night mode (23:00–06:00): `_hue()` pulls every device colour 80% to
   `_nightRed`.
-- **Standby (3 Nov 2026)**: untouched for 5 min (`_standbyAfter`, counted
+- **Standby (3 Nov 2026)**: untouched for 15 s (`_standbyAfter`; 5 min at first, the user cut it to 15 s, counted
   from the last pointer-down, app start or resume; `_touched`), the whole
   dashboard goes true black — the user's "AMOLED style black" to save the
   battery: `_Backdrop` crossfades (3 s) to a plain black box, which

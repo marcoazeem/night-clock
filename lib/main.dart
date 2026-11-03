@@ -231,7 +231,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   /// look back.
   bool _standby = false;
   Timer? _standbyTimer;
-  static const _standbyAfter = Duration(minutes: 5);
+  static const _standbyAfter = Duration(seconds: 15);
 
   /// Any touch restarts the count to standby (and ends it), and the walk
   /// back to this device's own room.
