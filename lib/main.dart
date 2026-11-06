@@ -766,7 +766,6 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                       digitSize,
                       night,
                       inline: !landscape,
-                      still: _standby,
                     );
               final faceAndWeather = card == null
                   ? face

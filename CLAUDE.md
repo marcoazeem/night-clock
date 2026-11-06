@@ -512,8 +512,8 @@ app builds fine but the lights panel silently disappears.
   battery: `_Backdrop` crossfades (3 s) to a plain black box, which
   disposes the video and the sky ticker; `_GlowCard` reads `_Look`
   (an InheritedWidget around the screen) and drops its wash and glow,
-  leaving the border on black; the weather icon is the still SVG
-  (`still:`). Everything stays — clock, date, weather, every button (the
+  leaving the border on black; the weather icon keeps animating (only
+  night mode stills it — the user asked, 6 Nov 2026). Everything stays — clock, date, weather, every button (the
   user wanted all the buttons, not a clock-only face) — and keeps working;
   the first touch brings the full look back and restarts the count. The
   room's 15 s poll carries on (the house poll does anyway). iPad: the
@@ -521,7 +521,7 @@ app builds fine but the lights panel silently disappears.
   `NCSkyView.standby` fades the sky to black over 1.5 s and pauses the
   clip's player, `NCPanelPage.standby` fades the frost (UIVisualEffectView
   blur) out and the tiles draw `drawCardStyle(…, flat)`, `NCFaceView`
-  stops the Lottie icon, and the backlight drops to `kStandbyBrightness`
+  keeps the Lottie icon playing, and the backlight drops to `kStandbyBrightness`
   (0.12) — an LCD doesn't care about black, so there it's the backlight
   and the idle GPU that save power. Outside standby the iPad's backlight
   is capped at `kMaxBrightness` 0.4 (the user asked for ~40% always; the
