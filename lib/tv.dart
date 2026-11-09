@@ -273,6 +273,22 @@ List<AndroidTvBox> configuredBoxes() {
   ];
 }
 
+/// The boxes playing through a TV's HDMI, by the TV's name:
+/// `MEDIA_BOX="TV=192.168.1.70"`. The TV card's OK button sends play /
+/// pause to that box over ADB — the TV's own OK never reaches its HDMI
+/// input (the M&M's Room Hisense plays from a DV8535 on HDMI 1).
+Map<String, AndroidTvBox> configuredMediaBoxes() {
+  const spec = String.fromEnvironment('MEDIA_BOX');
+  return {
+    for (final part in spec.split(','))
+      if (part.contains('='))
+        part.substring(0, part.indexOf('=')).trim(): AndroidTvBox(
+          part.substring(0, part.indexOf('=')).trim(),
+          part.substring(part.indexOf('=') + 1).trim(),
+        ),
+  };
+}
+
 /// An Android TV set-top box (the user's Medianet "Beyond TV" box),
 /// switched over network ADB: a sleep key event to turn it off, and
 /// `dumpsys power` for the state. The box must have network debugging on

@@ -412,9 +412,17 @@ app builds fine but the lights panel silently disappears.
 - Config `HISENSE_TV=Name=IP/MAC`. Off → on → off verified on the real TV.
 - UI: a wide card under the AC tiles — a big power button (TV + power
   icons, `_tvBlue` when on) and volume − / + squares, live only when on.
-  Between them an **OK** square (9 Nov 2026) sending `KEY_OK`, the
-  remote's OK, to pause / play — on this Hisense card only (`okRect` on
-  the iPad); the user said not on the other TVs' cards.
+  Between them an **OK** square (9 Nov 2026) to pause / play — on this
+  Hisense card only (`okRect` on the iPad); the user said not on the other
+  TVs' cards. The TV plays from **HDMI 1**, where a DV8535 box (the
+  streamit test box — so the user *does* want it driven, for this) sits,
+  and the TV's own `KEY_OK` never reaches an HDMI input: so OK sends
+  `KEYCODE_MEDIA_PLAY_PAUSE` to that box over ADB (`MEDIA_BOX="TV=<ip>"`
+  in lights.json, by the TV's name; `configuredMediaBoxes` /
+  `NCConfiguredMediaBoxes`), falling back to `KEY_OK` without one.
+  Verified from the Mac: the box's media session went playing → paused.
+  The phone's and iPad's own ADB keys each need one "Allow debugging?" on
+  the box.
   It was briefly a chip in the header; the user wanted it below, with
   volume, and the panel scrolling.
 
@@ -424,7 +432,9 @@ app builds fine but the lights panel silently disappears.
   TCL (IP in lights.json's BEYOND_TV; its Cast name says "Bedroom TV" —
   ignore that). NOT the other Android TV box on the network ("Living
   Room TV", runs the user's own streamit app) — it was mistaken for the
-  Beyond box once and given a debugging approval; leave it alone.
+  Beyond box once and given a debugging approval; leave it alone, except
+  play / pause: it's the DV8535 on the M&M's Room Hisense's HDMI 1, and
+  that TV card's OK button drives it (see TV).
 - Controlled over network ADB (port 5555): lib/adb.dart is a minimal
   hand-written ADB client (CNXN/AUTH/OPEN/WRTE, RSA PKCS#1 signing with
   BigInt, adbd's public-key format — byte-identical to adb's own). The

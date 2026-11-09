@@ -4661,6 +4661,9 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
   final _tvSwitched = <HisenseTv, DateTime>{};
   static const _tvSettle = Duration(seconds: 20);
 
+  /// The boxes playing through each TV's HDMI (MEDIA_BOX), for OK.
+  static final _mediaBoxes = configuredMediaBoxes();
+
   /// How long a box gets to boot after a Wake-on-LAN before a poll may
   /// read it as off again.
   static const _bootTime = Duration(seconds: 45);
@@ -5587,9 +5590,20 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
           if (tv != null && box == null) ...[
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: tvOn
-                  ? () => tv.sendKey('KEY_OK').catchError((_) {})
-                  : null,
+              // Play / pause on the box behind the TV when there is one
+              // (MEDIA_BOX); else the TV's own OK.
+              onTap: !tvOn
+                  ? null
+                  : _mediaBoxes[tv.name] != null
+                  ? () async {
+                      try {
+                        await _mediaBoxes[tv.name]!.sendKey(
+                          await _loadAdbKey(),
+                          'KEYCODE_MEDIA_PLAY_PAUSE',
+                        );
+                      } catch (_) {}
+                    }
+                  : () => tv.sendKey('KEY_OK').catchError((_) {}),
               child: Container(
                 width: u * 5,
                 height: u * 5,
