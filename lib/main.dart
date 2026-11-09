@@ -761,12 +761,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               // the clock keeps the whole width.
               final card = weather == null
                   ? null
-                  : _weatherCard(
-                      weather,
-                      digitSize,
-                      night,
-                      inline: !landscape,
-                    );
+                  : _weatherCard(weather, digitSize, night, inline: !landscape);
               final faceAndWeather = card == null
                   ? face
                   : Column(
@@ -5581,6 +5576,36 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                       color: tvFg,
                     ),
                   ],
+                ),
+              ),
+            ),
+            SizedBox(width: u * 0.6),
+          ],
+          // OK, as on the remote — pauses / plays what's on. Only the
+          // Hisense on its own (M&M's Room); the user asked for it there
+          // and nowhere else (9 Nov 2026).
+          if (tv != null && box == null) ...[
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: tvOn
+                  ? () => tv.sendKey('KEY_OK').catchError((_) {})
+                  : null,
+              child: Container(
+                width: u * 5,
+                height: u * 5,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _surface,
+                  borderRadius: r,
+                  border: Border.all(color: _surfaceEdge),
+                ),
+                child: Text(
+                  'OK',
+                  style: TextStyle(
+                    color: _white.withValues(alpha: tvOn ? 0.85 : 0.25),
+                    fontSize: u * 1.2,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ),

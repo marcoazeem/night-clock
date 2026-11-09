@@ -412,6 +412,9 @@ app builds fine but the lights panel silently disappears.
 - Config `HISENSE_TV=Name=IP/MAC`. Off → on → off verified on the real TV.
 - UI: a wide card under the AC tiles — a big power button (TV + power
   icons, `_tvBlue` when on) and volume − / + squares, live only when on.
+  Between them an **OK** square (9 Nov 2026) sending `KEY_OK`, the
+  remote's OK, to pause / play — on this Hisense card only (`okRect` on
+  the iPad); the user said not on the other TVs' cards.
   It was briefly a chip in the header; the user wanted it below, with
   volume, and the panel scrolling.
 
