@@ -4517,7 +4517,9 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
             ),
           ),
           volume(Icons.remove, 'KEY_VOLUMEDOWN', 'KEYCODE_VOLUME_DOWN'),
-          // OK / play-pause, on the Hisense on its own (M&M's Room) only —
+          volume(Icons.add, 'KEY_VOLUMEUP', 'KEYCODE_VOLUME_UP'),
+          // OK / play-pause, beside power (out of the middle, where it was hard
+          // to hit — the user asked, 10 Nov 2026), on the Hisense on its own (M&M's Room) only —
           // the user asked for it there and nowhere else (9 Nov 2026).
           if (tv != null && box == null)
             GestureDetector(
@@ -4551,7 +4553,6 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                 ),
               ),
             ),
-          volume(Icons.add, 'KEY_VOLUMEUP', 'KEYCODE_VOLUME_UP'),
           if (box != null)
             _luxIcon(
               Icons.power_settings_new_rounded,

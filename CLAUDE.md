@@ -509,8 +509,9 @@ repos; `main` keeps the glass look below. On this branch it overrides
   the nearest underlined in gold; a level turns it on), Sonoff tiles three
   to a row, each AC as one row (`AcPanel`: "AIR CON" — the user's label —
   name, state, − setpoint + power; the round dial is gone), the TV as a
-  slim strip (− , gold play/pause ring = the OK/MEDIA_BOX button, +,
-  power). No status line.
+  slim strip (− , +, then the gold play/pause ring = the OK/MEDIA_BOX
+  button right beside power — moved out of the middle, where the user found
+  it hard to hit). No status line.
 - Rooms are text tabs along the foot (`_roomTabs`, gold dot under the
   active one; HOME first); they replaced the header's house button.
   Locked rooms still go through the PinPad. The home page keeps its house
