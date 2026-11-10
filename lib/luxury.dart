@@ -181,45 +181,54 @@ class _LuxPicture extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 1500),
-      child: standby || const bool.fromEnvironment('NO_VIDEO')
-          ? const SizedBox.expand(key: ValueKey('none'))
-          : ShaderMask(
-              key: ValueKey('$clip/$still'),
-              blendMode: BlendMode.dstIn,
-              shaderCallback: (r) => const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black,
-                  Colors.black,
-                  Colors.transparent,
-                ],
-                stops: [0, 0.32, 0.66, 1],
-              ).createShader(r),
-              child: Opacity(
-                opacity: night ? 0.45 : (still ? 0.7 : 0.8),
-                child: still
-                    // A frame of the clip (assets/video/<clip>.jpg, made
-                    // with ffmpeg beside the clip; gitignored like it).
-                    ? ColorFiltered(
-                        colorFilter: _grey,
-                        child: Image.asset(
-                          'assets/video/$clip.jpg',
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity,
-                          errorBuilder: (_, _, _) => const SizedBox.expand(),
+    // Fill the strip it's given (the clip's FittedBox would otherwise
+    // shrink to its aspect ratio under a loose width).
+    return SizedBox.expand(
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 1500),
+        // Each child fills the strip (the default centres them loosely).
+        layoutBuilder: (current, previous) => Stack(
+          fit: StackFit.expand,
+          children: [...previous, ?current],
+        ),
+        child: standby || const bool.fromEnvironment('NO_VIDEO')
+            ? const SizedBox.expand(key: ValueKey('none'))
+            : ShaderMask(
+                key: ValueKey('$clip/$still'),
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (r) => const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black,
+                    Colors.black,
+                    Colors.transparent,
+                  ],
+                  stops: [0, 0.32, 0.66, 1],
+                ).createShader(r),
+                child: Opacity(
+                  opacity: night ? 0.45 : (still ? 0.7 : 0.8),
+                  child: still
+                      // A frame of the clip (assets/video/<clip>.jpg, made
+                      // with ffmpeg beside the clip; gitignored like it).
+                      ? ColorFiltered(
+                          colorFilter: _grey,
+                          child: Image.asset(
+                            'assets/video/$clip.jpg',
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            errorBuilder: (_, _, _) => const SizedBox.expand(),
+                          ),
+                        )
+                      : _VideoSky(
+                          asset: 'assets/video/$clip.mp4',
+                          fallback: const SizedBox.expand(),
                         ),
-                      )
-                    : _VideoSky(
-                        asset: 'assets/video/$clip.mp4',
-                        fallback: const SizedBox.expand(),
-                      ),
+                ),
               ),
-            ),
+      ),
     );
   }
 }
