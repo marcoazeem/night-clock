@@ -1,6 +1,13 @@
 import 'dart:async';
 import 'dart:isolate';
-import 'dart:io' show InternetAddressType, NetworkInterface;
+import 'dart:io'
+    show
+        ContentType,
+        HttpServer,
+        HttpStatus,
+        InternetAddress,
+        InternetAddressType,
+        NetworkInterface;
 import 'dart:math';
 import 'dart:ui' show ImageFilter, FontFeature;
 import 'dart:ui' as ui show Image;
@@ -2762,8 +2769,40 @@ class EnergyTracker extends ChangeNotifier {
   /// The card shows only with bills to go on.
   bool get enabled => meter.bills.isNotEmpty;
 
+  HttpServer? _server;
+
+  /// Serves this count on the home Wi-Fi (GET /energy, [energySyncPort]) so
+  /// the iPad can take it at launch and once a day: each device used to
+  /// keep its own and their bills drifted apart; the phone runs all the
+  /// time, so its count is the fuller one (the user asked, 10 Nov 2026).
+  /// Read-only, and only the kWh totals.
+  Future<void> _serve() async {
+    if (_server != null) return;
+    try {
+      final server = await HttpServer.bind(
+        InternetAddress.anyIPv4,
+        energySyncPort,
+        shared: true,
+      );
+      _server = server;
+      server.listen((req) {
+        final res = req.response;
+        if (req.method == 'GET' && req.uri.path == '/energy') {
+          res.headers.contentType = ContentType.json;
+          res.write(meter.toJson());
+        } else {
+          res.statusCode = HttpStatus.notFound;
+        }
+        res.close().catchError((_) {});
+      }, onError: (_) {});
+    } catch (_) {
+      // The port's taken or there's no network: the iPad keeps its own.
+    }
+  }
+
   void start() {
     _timer?.cancel();
+    _serve();
     _poll();
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
   }

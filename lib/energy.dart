@@ -82,6 +82,10 @@ int configuredBillDay() =>
 double configuredBaseline() =>
     double.tryParse(const String.fromEnvironment('ENERGY_BASELINE_W')) ?? 400;
 
+/// The phone serves its count here on the home Wi-Fi (GET /energy) for the
+/// iPad, which takes it at launch and once a day (ENERGY_FROM on the iPad).
+const energySyncPort = 8787;
+
 /// The fridge, a Haier HRB-2763CKG-E (256 L, 3 star; 234 kWh a year on its
 /// label ≈ 27 W), as its average — a little over the label for Malé's heat.
 const fridgeWatts = 32.0;

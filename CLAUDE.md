@@ -281,7 +281,16 @@ app builds fine but the lights panel silently disappears.
   `waterHeaterWatts` 104 W); "Other" is the remaining 264 W, so the total —
   and the bill projection tuned with it — is unchanged. `Draw.appliances`,
   shown as "Fridge & heater" in the home card's split (iPad:
-  `applianceWatts`). kWh add up per day and per billing period (from `BILL_DAY`, 14 —
+  `applianceWatts`). **One count, the phone's** (10 Nov 2026 — the user saw the
+  phone and iPad show different bills: each kept its own meter from its own
+  start date, through its own downtime): the phone serves its meter JSON
+  read-only on the home Wi-Fi (`EnergyTracker._serve`, port
+  `energySyncPort` 8787, GET /energy — kWh totals only), and the iPad takes
+  it 20 s after launch and every 24 h (`-[NCEnergyTracker syncFromPhone]`,
+  `ENERGY_FROM="<phone ip>:8787"` in lights.json), adopting the period's
+  and today's kWh when both are in the same billing period, then counting
+  on from there. No answer → it keeps its own. Verified: both showed
+  ≈ MVR 2,397. If the phone's IP changes, update ENERGY_FROM. kWh add up per day and per billing period (from `BILL_DAY`, 14 —
   the new apartment's bills come mid-month),
   saved in prefs ('energy'); a gap counts the last draw for 2 h, then the
   baseline. The first run fills the period's untracked start at last
