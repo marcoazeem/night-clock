@@ -19,6 +19,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'adb.dart';
 import 'gree.dart';
+import 'holidays.dart';
 import 'lights.dart';
 import 'energy.dart';
 import 'tv.dart';
@@ -256,6 +257,11 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
   final _place = configuredPlace();
   Weather? _weather;
   Timer? _weatherTimer;
+
+  /// Maldives holidays ("yyyyMMdd=Name"), kept in prefs for offline; the
+  /// next one within 15 days sits on the hairline.
+  List<String> _holidays = const [];
+  DateTime? _holidaysAt;
   final _random = Random();
   Timer? _tick;
   Timer? _driftTimer;
@@ -297,15 +303,36 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Holidays ride along with the weather, fetched at most every 12 h.
+  Future<void> _refreshHolidays() async {
+    final at = _holidaysAt;
+    if (_holidays.isNotEmpty &&
+        at != null &&
+        DateTime.now().difference(at) < const Duration(hours: 12)) {
+      return;
+    }
+    try {
+      final list = await fetchHolidays();
+      if (list.isEmpty) return;
+      _holidaysAt = DateTime.now();
+      _prefs?.setStringList('holidays', list);
+      _prefs?.setInt('holidaysAt', _holidaysAt!.millisecondsSinceEpoch);
+      if (mounted) setState(() => _holidays = list);
+    } catch (_) {
+      // Offline: keep the last copy.
+    }
+  }
+
   void _startTimers() {
     _energy.start();
     _scheduleTick();
     _refreshWeather();
+    _refreshHolidays();
     _weatherTimer?.cancel();
-    _weatherTimer = Timer.periodic(
-      const Duration(minutes: 15),
-      (_) => _refreshWeather(),
-    );
+    _weatherTimer = Timer.periodic(const Duration(minutes: 15), (_) {
+      _refreshWeather();
+      _refreshHolidays();
+    });
     // AMOLED burn-in protection: shift the clock a few pixels every minute.
     _driftTimer?.cancel();
     _driftTimer = Timer.periodic(const Duration(minutes: 1), (_) {
@@ -364,7 +391,11 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     if (!mounted) return;
     setState(() {
       _dim = (_prefs!.getDouble('dim') ?? 0.55).clamp(0.0, 1.0);
+      _holidays = _prefs!.getStringList('holidays') ?? const [];
+      final at = _prefs!.getInt('holidaysAt');
+      if (at != null) _holidaysAt = DateTime.fromMillisecondsSinceEpoch(at);
     });
+    _refreshHolidays();
     _applyBrightness();
     // The TV boxes' MACs, learned from the boxes themselves (see
     // AndroidTvBox): Wake-on-LAN needs them once a box is off the network.
@@ -722,26 +753,62 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
               );
 
               final weather = _weather;
+              final holiday = holidayLine(_holidays, _now);
+              // The fading rule under the time; three alphas, left to right.
+              Widget hairline(double? width, double a, double b, double c) =>
+                  Container(
+                    width: width,
+                    height: max(1.5, digitSize * 0.0045),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      gradient: LinearGradient(
+                        colors: [
+                          timeColor.withValues(alpha: a),
+                          timeColor.withValues(alpha: b),
+                          timeColor.withValues(alpha: c),
+                        ],
+                      ),
+                    ),
+                  );
 
               final face = Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   time,
                   SizedBox(height: gap),
-                  Container(
-                    width: faceWidth,
-                    height: max(1.5, digitSize * 0.0045),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(2),
-                      gradient: LinearGradient(
-                        colors: [
-                          timeColor.withValues(alpha: 0),
-                          timeColor.withValues(alpha: 0.55),
-                          timeColor.withValues(alpha: 0),
+                  if (holiday == null)
+                    hairline(faceWidth, 0, 0.55, 0)
+                  else
+                    // The next holiday sits on the hairline, which fades
+                    // out either side of it (the user asked, 10 Nov 2026 —
+                    // no new row on the phone's crowded face).
+                    SizedBox(
+                      width: timeWidth * 0.95,
+                      child: Row(
+                        children: [
+                          Expanded(child: hairline(null, 0, 0.35, 0.55)),
+                          SizedBox(width: digitSize * 0.05),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: timeWidth * 0.7,
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                holiday,
+                                style: dateStyle.copyWith(
+                                  fontSize: digitSize * 0.085,
+                                  letterSpacing: digitSize * 0.006,
+                                  color: clockColor.withValues(alpha: 0.75),
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: digitSize * 0.05),
+                          Expanded(child: hairline(null, 0.55, 0.35, 0)),
                         ],
                       ),
                     ),
-                  ),
                   SizedBox(height: gap),
                   _capWidth(
                     timeWidth * 0.85,

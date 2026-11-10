@@ -21,6 +21,10 @@ charging, without giving up the clock.
   mode. The date is in the same colour, with the current weather beside it — sunny / clear / rain and the
   temperature, from [Open-Meteo](https://open-meteo.com/) (set
   `WEATHER_AT` to your `lat,lon` in `lights.json`).
+- **Holidays**: when a Maldives public holiday is 15 days away or less,
+  its name and a countdown sit on the line under the time ("REPUBLIC DAY ·
+  TOMORROW"), from Google's public holiday calendar (no key), checked
+  every 12 hours and kept for offline.
 - **Sky** behind everything changes with the time and weather: a sunrise
   and soft sun in the morning (06–11), deep blue by day, a sunset glow
   (17–19), stars once it's dark (19–06), and rain falling whenever it
