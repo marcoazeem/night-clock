@@ -80,6 +80,13 @@ flutter:
       fonts:
         - asset: fonts/ChakraPetch-Bold.ttf
           weight: 700
+    # Jost for the luxury face (the time, temperature and setpoints), thin.
+    - family: Jost
+      fonts:
+        - asset: fonts/Jost-ExtraLight.ttf
+          weight: 200
+        - asset: fonts/Jost-Light.ttf
+          weight: 300
     # Inter for the dashboard's labels and readouts.
     - family: Inter
       fonts:

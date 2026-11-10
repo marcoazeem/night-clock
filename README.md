@@ -15,24 +15,28 @@ charging, without giving up the clock.
 
 ## Look
 
-- **Clock** in [Chakra Petch](https://fonts.google.com/specimen/Chakra+Petch)
-  Bold — a squared, angular dashboard face — coloured to match the sky: sunrise amber, sunny yellow, sunset coral,
-  steel blue in the rain, moonlit lavender after dark and slate in night
-  mode. The date is in the same colour, with the current weather beside it — sunny / clear / rain and the
-  temperature, from [Open-Meteo](https://open-meteo.com/) (set
-  `WEATHER_AT` to your `lat,lon` in `lights.json`).
+- **Luxury look** (the `luxury` branch): pure black for the OLED, warm
+  ivory type, and one accent, champagne gold, for whatever is on. Cards
+  are near-black with a thin edge that catches light like brushed metal.
+  No glass, no glow, no moving sky.
+- **Clock** in [Jost](https://fonts.google.com/specimen/Jost) ExtraLight,
+  big and thin like a watch face, with the date in small spaced capitals
+  above it. Under it the weather (animated Meteocons and the temperature
+  from [Open-Meteo](https://open-meteo.com/); set `WEATHER_AT` to your
+  `lat,lon` in `lights.json`) and the draw now and projected bill.
 - **Holidays**: when a Maldives public holiday is 15 days away or less,
   its name and a countdown sit on the line under the time ("REPUBLIC DAY ·
   TOMORROW"), from Google's public holiday calendar (no key), checked
   every 12 hours and kept for offline.
-- **Sky** behind everything changes with the time and weather: a sunrise
-  and soft sun in the morning (06–11), deep blue by day, a sunset glow
-  (17–19), stars once it's dark (19–06), and rain falling whenever it
-  rains.
-- **Lights as lightboxes**: each bulb sits in a little shadow box with a
-  wall switch. Tap the box to switch it; on, the bulb lights and its glow
-  fills the box, brighter with the level. A bulb with a colour
-  temperature (a Yeelight) gets a warm → cool strip across the top.
+- **Picture**: your own clip for the time and weather (sunny by day,
+  night after dark, rain whenever it rains) plays in a strip that fades
+  into the black. After dark it's a greyscale still. Only the picture
+  changes; the screen never turns light. It fades out in standby.
+- **Lights first**: big tiles (tap to switch; it also picks the light for
+  the dimmer row), then the dimmer row (tap the light's name to switch
+  lights, 1 / 25 / 50 / 100), the wall switches, the AC as one row
+  (− setpoint + and power), and the TV as a slim strip with a gold
+  play / pause ring. Rooms are text tabs along the foot.
 - **The house** on the home page: a 3D render of the apartment
   (`assets/images/blueprint.png`, your own — the repo ships without one
   and shows room cards instead) with a label hung at each room — tap the
@@ -44,9 +48,6 @@ charging, without giving up the clock.
   this billing period's kWh, the projected bill on STELCO's domestic
   tariff, and a line graph of your past bills (`BILLS`, `AC_BTU`,
   `BILL_DAY` in `lights.json`). It's an estimate — nothing is metered.
-- **Frosted-glass cards**, each in its device's own colour — amber and
-  icy white for the bulbs, violet for the TV, and the AC's colour follows
-  its mode (cyan cooling, orange heating).
 - **Night mode** (23:00–06:00) shifts the dashboard's colours to deep red.
 
 ## Gestures
@@ -206,9 +207,11 @@ standby.
 
 ## Fonts
 
-**Chakra Petch** (by Cadson Demak), SIL OFL, in `fonts/` with its license:
-the clock face — time, date and temperature — in Bold. **Inter** (by Rasmus
-Andersson), SIL OFL, likewise: everything else, in Regular and Medium.
+**Jost** (by Owen Earl, indestructible type*), SIL OFL, in `fonts/` with
+its license (`OFL-Jost.txt`): the luxury clock, temperatures and setpoints,
+in ExtraLight and Light. **Chakra Petch** (by Cadson Demak), SIL OFL: the
+earlier clock face (main branch). **Inter** (by Rasmus Andersson), SIL OFL:
+everything else, in Light, Regular and Medium.
 
 ## Weather icons
 
@@ -219,7 +222,7 @@ as the animated Lottie files from `@meteocons/lottie`, played with the
 
 ## Lightbox
 
-The light tiles are based on
+The main branch's light tiles (not the luxury look's) are based on
 [Lightbox](https://rive.app/marketplace/19639-36948-lightbox/) by Gary
 Simon ([DesignCourse](https://designcourse.com/)), shared on the Rive
 marketplace under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

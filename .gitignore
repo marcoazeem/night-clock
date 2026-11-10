@@ -52,6 +52,7 @@ app.*.map.json
 /*.mp4
 /*.mov
 /assets/video/*.mp4
+/assets/video/*.jpg
 /*.mov
 
 # iPad build output (rendered glyphs, generated Config.h with the light keys, the app)

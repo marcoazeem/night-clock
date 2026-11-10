@@ -7,7 +7,6 @@ import 'dart:ui' as ui show Image;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:lottie/lottie.dart';
@@ -24,6 +23,8 @@ import 'lights.dart';
 import 'energy.dart';
 import 'tv.dart';
 import 'weather.dart';
+
+part 'luxury.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -93,19 +94,6 @@ bool _isNight(DateTime t) =>
 /// The hairline's tint at night.
 const _nightTime = Color(0xFFFF8A75);
 
-/// The clock face: Chakra Petch Bold, in one colour that follows the sky
-/// (see [_clockColor]). The user chose it from a sheet of dashboard typefaces
-/// on 28 Oct 2026, after a day of Inter (which had replaced Bungee Tint, a
-/// two-colour font). Its figures are proportional — a "1" is 0.382 em, a "0"
-/// 0.652 — so each one is drawn centred in a slot the width of the widest,
-/// and the clock's width doesn't change from minute to minute. The figures
-/// stand [_capHeight] em on the baseline, flat (no overshoot) — all measured
-/// from Flutter's own render of the bundled TTF.
-const _clockFamily = 'Chakra Petch';
-const _digitSlot = 0.652;
-const _colonSlot = 0.232;
-const _capHeight = 0.703;
-
 /// The clock's colour for the sky behind it: sunrise amber in the morning,
 /// sunny yellow by day, sunset coral in the evening, steel blue in the rain;
 /// after dark moonlit lavender (deep blue in the rain), and slate in red
@@ -122,13 +110,6 @@ Color _clockColor(DateTime now, {required bool night, required bool raining}) {
   return const Color(0xFFFFD23F);
 }
 
-/// How much of the room it's given the face actually fills. This is the size
-/// dial, not `digitSize` — that deliberately overshoots and the `FittedBox`
-/// scales it back to whatever box it's handed, so shrinking it changes
-/// nothing. Edge to edge was too big both ways up; the user asked for 20%
-/// less, first standing and then on its side.
-const _faceScale = 0.8;
-
 /// Holds [child] to [width], shrinking it if it would be wider. The time is
 /// what should set the face width, stacked or across; without this a long
 /// date or a wide platform font would, and the digits would shrink to suit.
@@ -144,30 +125,7 @@ int? _nearestPreset(int? level) => level == null
         ),
       );
 
-Widget _capWidth(double width, Widget child) {
-  return SizedBox(
-    width: width,
-    child: FittedBox(fit: BoxFit.scaleDown, child: child),
-  );
-}
-
 class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
-  static const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  static const _months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-
   double _dim = 0.55;
 
   /// The level when a press-and-hold started — non-null while adjusting,
@@ -454,118 +412,6 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
           !const bool.fromEnvironment('FORCE_CLEAR')) ||
       const bool.fromEnvironment('FORCE_RAIN');
 
-  /// The weather: icon over temperature beside the clock, or [inline] —
-  /// icon then temperature on one small line under the date (standing, so
-  /// the clock gets the full width).
-  Widget _weatherCard(
-    Weather w,
-    double d,
-    bool night, {
-    bool inline = false,
-    bool still = false,
-  }) {
-    // Meteocons (Bas Milius, MIT) — the user picked them over Material,
-    // Oct 2026. Their art fills ~70% of the 64-unit box, hence the size up.
-    final size = d * (inline ? 0.4 : 0.6);
-    final name = const bool.fromEnvironment('FORCE_RAIN')
-        ? 'rain'
-        : const bool.fromEnvironment('FORCE_CLEAR')
-        ? 'clear-${w.isDay ? 'day' : 'night'}'
-        : w.icon;
-    // Animated (Meteocons' Lottie files, the same art), except [still]
-    // (standby) and in night mode, where it's the still SVG pulled towards
-    // the dashboard's red — the user asked for the animation to stop once
-    // the red tint is on.
-    Widget icon = night || still
-        ? SvgPicture.asset(
-            'assets/weather/$name.svg',
-            width: size,
-            height: size,
-          )
-        // Its own layer, at 24 fps, so the clock and the glass cards
-        // around it don't repaint with every frame.
-        : RepaintBoundary(
-            child: Lottie.asset(
-              'assets/weather/$name.json',
-              width: size,
-              height: size,
-              fit: BoxFit.contain,
-              frameRate: const FrameRate(24),
-              errorBuilder: (_, _, _) => SvgPicture.asset(
-                'assets/weather/$name.svg',
-                width: size,
-                height: size,
-              ),
-            ),
-          );
-    if (night) {
-      icon = ColorFiltered(
-        colorFilter: ColorFilter.mode(_hue(_white, true), BlendMode.modulate),
-        child: icon,
-      );
-    }
-    // No card behind it. The clock's font, in its colour.
-    final color = _clockColor(_now, night: night, raining: _raining);
-    final tempStyle = TextStyle(
-      fontFamily: _clockFamily,
-      fontWeight: FontWeight.w700,
-      color: color,
-      fontSize: d * (inline ? 0.26 : 0.42),
-      height: 1,
-    );
-    // The house's draw now and this bill's estimate (the user wanted the
-    // bill by the temperature, 3 Nov 2026) — two short lines in Inter, in
-    // the clock's colour, standing beside the temperature or under it.
-    // Not on the home page: its energy card is right there (the user
-    // didn't want it twice).
-    final onHome = _room == null && _rooms.length > 1;
-    final watts = onHome ? null : _energy.draw?.total;
-    final bill = _energy.enabled ? _energy.projectedMvr : null;
-    final energy = watts == null
-        ? null
-        : Column(
-            crossAxisAlignment: inline
-                ? CrossAxisAlignment.start
-                : CrossAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final line in [
-                _kw(watts),
-                if (bill != null) '≈ MVR ${_mvr(bill)}',
-              ])
-                Text(
-                  line,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: color.withValues(alpha: 0.85),
-                    fontSize: d * (inline ? 0.15 : 0.2),
-                    height: 1.2,
-                  ),
-                ),
-            ],
-          );
-    if (inline) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          icon,
-          SizedBox(width: d * 0.08),
-          Text('${w.temp}°C', style: tempStyle),
-          if (energy != null) ...[SizedBox(width: d * 0.16), energy],
-        ],
-      );
-    }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        icon,
-        SizedBox(height: d * 0.12),
-        Text('${w.temp}°C', style: tempStyle),
-        if (energy != null) ...[SizedBox(height: d * 0.1), energy],
-      ],
-    );
-  }
-
   /// The home page (every room as a card) or one room's controls.
   Widget _panel({
     required bool night,
@@ -589,22 +435,22 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         }),
       );
     } else if (index == null) {
-      child = HomePanel(
+      // The home page keeps its cards, flat on the black.
+      child = KeyedSubtree(
         key: const ValueKey('home'),
-        rooms: _rooms,
-        here: _homeRoom,
-        energy: _energy,
-        width: width,
-        unit: unit,
-        night: night,
-        dim: _isDark(_now),
-        onOpen: (i) => setState(() {
-          if (_rooms[i].pin != null && i != _homeRoom) {
-            _asking = i;
-          } else {
-            _room = i;
-          }
-        }),
+        child: _Look(
+          standby: true,
+          child: HomePanel(
+            rooms: _rooms,
+            here: _homeRoom,
+            energy: _energy,
+            width: width,
+            unit: unit,
+            night: night,
+            dim: _isDark(_now),
+            onOpen: _openRoom,
+          ),
+        ),
       );
     } else {
       final room = _rooms[index];
@@ -612,7 +458,6 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
         key: ValueKey(room.name),
         title: _rooms.length > 1 ? room.name : null,
         subtitle: room.subtitle,
-        onHome: _rooms.length > 1 ? () => setState(() => _room = null) : null,
         lights: room.lights,
         acs: room.acs,
         tvs: room.tvs,
@@ -633,14 +478,96 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Opens room [i] — through its passcode pad when it's locked and isn't
+  /// this device's own room.
+  void _openRoom(int i) => setState(() {
+    if (_rooms[i].pin != null && i != _homeRoom) {
+      _room = null;
+      _asking = i;
+    } else {
+      _asking = null;
+      _room = i;
+    }
+  });
+
+  /// The rooms along the foot, text only: the one on screen in ivory with
+  /// a gold dot under it (the luxury look; it replaced the header's house
+  /// button).
+  Widget _roomTabs(double s, bool night) {
+    final gold = _goldFor(night);
+    Widget tab(String label, bool active, VoidCallback onTap) =>
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 6 * s, vertical: 10 * s),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: _caps(
+                    9.5 * s,
+                    color: active ? _ivory : _muted,
+                    spacing: 0.26,
+                    weight: active ? FontWeight.w500 : FontWeight.w400,
+                  ),
+                ),
+                SizedBox(height: 6 * s),
+                Container(
+                  width: 3 * s,
+                  height: 3 * s,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: active ? gold : Colors.transparent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        tab(
+          'HOME',
+          _room == null && _asking == null,
+          () => setState(() {
+            _room = null;
+            _asking = null;
+          }),
+        ),
+        for (final (i, r) in _rooms.indexed)
+          tab(
+            r.name.split(' ').first.toUpperCase(),
+            _room == i || _asking == i,
+            () => _openRoom(i),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Always 24-hour: the user dropped the 12h/AM-PM and seconds options.
     final hh = _now.hour.toString().padLeft(2, '0');
     final mm = _now.minute.toString().padLeft(2, '0');
     final night = _isNight(_now);
-    final timeColor = night ? _nightTime : _white;
-    final clockColor = _clockColor(_now, night: night, raining: _raining);
+    final timeColor = night ? _nightTime : _ivory;
+    // Ivory by day; night mode keeps its slate clock.
+    final clockColor = night
+        ? _clockColor(_now, night: true, raining: _raining)
+        : _ivory;
+    final onHome = _room == null && _rooms.length > 1;
+    // Only the picture follows the weather: rain whenever it rains, the
+    // night clip after dark, the sunny one by day; the home page's forest.
+    final clip = onHome
+        ? 'homescreen'
+        : _raining
+        ? 'rainy'
+        : night || _isDark(_now)
+        ? 'night'
+        : 'sunny';
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -672,173 +599,208 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
             builder: (context, constraints) {
               final w = constraints.maxWidth;
               final h = constraints.maxHeight;
-              // The stand holds the phone upright on the charger; turned on
-              // its side it slides off the coil and stops charging, so both
-              // ways up have to read as a clock.
+              // Standing on the charger, or on its side once it's full.
               final landscape = w > h;
-
-              // Burn-in drift, further along the panel's long axis. Small
-              // now: the sky behind is always moving, so only the clock and
-              // cards need it (it was ±20×±40 on a static black screen).
-              final driftX = landscape ? 12.0 : 8.0;
-              final driftY = landscape ? 8.0 : 12.0;
-
-              // HH:MM on one line both ways up — standing, that leaves the
-              // panel's height for the lights and AC. Overshoots on purpose:
-              // the FittedBox below scales the column down until it fills its
-              // box, and scaleDown never scales up.
-              final digitSize = min(w * 0.55, h * 1.15);
-              // The time's ink stands 0.79 of digitSize tall (as Bungee's
-              // did — every other size on the face follows digitSize), and
-              // the figures are _capHeight em, so the font size is a little
-              // bigger than digitSize.
-              final fontSize = digitSize * 0.79 / _capHeight;
-              // The time's own width: four digit slots and the colon's.
-              final timeWidth = fontSize * (4 * _digitSlot + _colonSlot);
-              // Everything under the time is held to this — otherwise a long
-              // date sets the width and the digits shrink to suit. Narrower
-              // than the time on purpose: a full-width rule reads as an
-              // underline rather than a divider.
-              final faceWidth = timeWidth * 0.61;
-              final gap = digitSize * 0.07;
-              // The panel sizes off the screen's short side, so it's the same
-              // size whichever way up the phone is.
+              // Sizes are the mock-up's, drawn on this phone standing (411
+              // wide), scaled by the short side.
               final barSpan = min(w, h);
-              final digitStyle = TextStyle(
-                fontFamily: _clockFamily,
-                color: clockColor,
-                fontSize: fontSize,
-                fontWeight: FontWeight.w700,
-                height: 1.0,
-              );
-              // The date is the same face, smaller, in the same sky colour.
-              final dateStyle = TextStyle(
-                fontFamily: _clockFamily,
-                color: clockColor,
-                fontWeight: FontWeight.w700,
-                fontSize: digitSize * 0.2,
-                height: 1.0,
-                letterSpacing: digitSize * 0.012,
-              );
-
-              // Each glyph is centred in its own slot (the font's figures are
-              // proportional), and the line box leaves room above and below
-              // the figures, so every glyph's baseline is pinned to the foot
-              // of a box just the ink's height: the digits fill it and the
-              // hairline sits close under them. (A fixed width too: inside
-              // the FittedBox the width is unbounded, and an OverflowBox
-              // would take all of it.)
-              final time = SizedBox(
-                width: timeWidth,
-                height: digitSize * 0.79,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (final ch in '$hh:$mm'.split(''))
-                      SizedBox(
-                        width: fontSize * (ch == ':' ? _colonSlot : _digitSlot),
-                        child: OverflowBox(
-                          alignment: Alignment.topCenter,
-                          maxWidth: double.infinity,
-                          maxHeight: double.infinity,
-                          child: Baseline(
-                            baseline: digitSize * 0.79,
-                            baselineType: TextBaseline.alphabetic,
-                            child: Text(ch, style: digitStyle, softWrap: false),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              );
+              final s = barSpan / 411;
+              // Burn-in drift: a few pixels a minute.
+              final driftX = (landscape ? 10.0 : 6.0) * s;
+              final driftY = (landscape ? 6.0 : 10.0) * s;
+              final pad = 14 * s;
 
               final weather = _weather;
               final holiday = holidayLine(_holidays, _now);
-              // The fading rule under the time; three alphas, left to right.
-              Widget hairline(double? width, double a, double b, double c) =>
-                  Container(
-                    width: width,
-                    height: max(1.5, digitSize * 0.0045),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(2),
-                      gradient: LinearGradient(
-                        colors: [
-                          timeColor.withValues(alpha: a),
-                          timeColor.withValues(alpha: b),
-                          timeColor.withValues(alpha: c),
-                        ],
-                      ),
-                    ),
-                  );
+              // The fading rule under the time; three alphas along it.
+              Widget hairline(double a, double b, double c) => Container(
+                height: 1,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      timeColor.withValues(alpha: a),
+                      timeColor.withValues(alpha: b),
+                      timeColor.withValues(alpha: c),
+                    ],
+                  ),
+                ),
+              );
+              final watts = onHome ? null : _energy.draw?.total;
+              final bill = _energy.enabled ? _energy.projectedMvr : null;
 
               final face = Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  time,
-                  SizedBox(height: gap),
-                  if (holiday == null)
-                    hairline(faceWidth, 0, 0.55, 0)
-                  else
-                    // The next holiday sits on the hairline, which fades
-                    // out either side of it (the user asked, 10 Nov 2026 —
-                    // no new row on the phone's crowded face).
-                    SizedBox(
-                      width: timeWidth * 0.95,
-                      child: Row(
-                        children: [
-                          Expanded(child: hairline(null, 0, 0.35, 0.55)),
-                          SizedBox(width: digitSize * 0.05),
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: timeWidth * 0.7,
-                            ),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                holiday,
-                                style: dateStyle.copyWith(
-                                  fontSize: digitSize * 0.085,
-                                  letterSpacing: digitSize * 0.006,
-                                  color: _holidayRed,
-                                ),
+                  Text(
+                    '${_weekdaysFull[_now.weekday - 1]}  ·  '
+                            '${_now.day} ${_monthsFull[_now.month - 1]}'
+                        .toUpperCase(),
+                    style: _caps(10.5 * s, spacing: 0.33),
+                  ),
+                  SizedBox(height: 2 * s),
+                  Text(
+                    '$hh:$mm',
+                    style: TextStyle(
+                      fontFamily: _jost,
+                      fontWeight: FontWeight.w200,
+                      fontSize: (landscape ? 84 : 100) * s,
+                      height: 1.04,
+                      letterSpacing: 2 * s,
+                      color: clockColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  SizedBox(height: 2 * s),
+                  // The next holiday sits on the hairline, in red (the user
+                  // asked); with none near, the hairline alone.
+                  Row(
+                    children: [
+                      Expanded(child: hairline(0, 0.1, 0.24)),
+                      if (holiday != null) ...[
+                        SizedBox(width: 12 * s),
+                        Flexible(
+                          flex: 4,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              holiday,
+                              style: _caps(
+                                10 * s,
+                                color: _holidayRed,
+                                spacing: 0.3,
                               ),
                             ),
                           ),
-                          SizedBox(width: digitSize * 0.05),
-                          Expanded(child: hairline(null, 0.55, 0.35, 0)),
+                        ),
+                        SizedBox(width: 12 * s),
+                      ],
+                      Expanded(child: hairline(0.24, 0.1, 0)),
+                    ],
+                  ),
+                  if (weather != null) ...[
+                    SizedBox(height: 10 * s),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _meteocon(weather, 34 * s, night),
+                        SizedBox(width: 8 * s),
+                        Text(
+                          '${weather.temp}°',
+                          style: TextStyle(
+                            fontFamily: _jost,
+                            fontWeight: FontWeight.w300,
+                            fontSize: 24 * s,
+                            height: 1,
+                            color: clockColor,
+                          ),
+                        ),
+                        if (watts != null) ...[
+                          SizedBox(width: 14 * s),
+                          Container(
+                            width: 1,
+                            height: 18 * s,
+                            color: const Color(0xFF2A2723),
+                          ),
+                          SizedBox(width: 14 * s),
+                          Text(
+                            [
+                              _kw(watts),
+                              if (bill != null) '≈ MVR ${_mvr(bill)}',
+                            ].join('  ·  ').toUpperCase(),
+                            style: _caps(10 * s, spacing: 0.22),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              );
+
+              final title = _asking != null
+                  ? _rooms[_asking!].name
+                  : _room != null
+                  ? _rooms[_room!].name
+                  : _rooms.length > 1
+                  ? 'Home'
+                  : null;
+              final header = title == null
+                  ? const SizedBox()
+                  : Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        title.toUpperCase(),
+                        style: _caps(11 * s, spacing: 0.32),
+                      ),
+                    );
+              final picture = _LuxPicture(
+                clip: clip,
+                standby: _standby,
+                night: night,
+                still: night || _isDark(_now),
+              );
+              final tabs = _rooms.length > 1 ? _roomTabs(s, night) : null;
+              final unit = barSpan * 0.034;
+
+              final Widget body;
+              if (landscape) {
+                final left = w * 0.42;
+                final panelWidth = w - 2 * (driftX + pad) - left - 20 * s;
+                body = Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: left,
+                      child: Column(
+                        children: [
+                          header,
+                          SizedBox(height: 8 * s),
+                          face,
+                          Expanded(child: picture),
                         ],
                       ),
                     ),
-                  SizedBox(height: gap),
-                  _capWidth(
-                    timeWidth * 0.85,
-                    Text(
-                      '${_weekdays[_now.weekday - 1]}  ·  '
-                              '${_months[_now.month - 1]} ${_now.day}'
-                          .toUpperCase(),
-                      style: dateStyle,
+                    SizedBox(width: 20 * s),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child: _panel(
+                                night: night,
+                                width: panelWidth,
+                                unit: unit,
+                              ),
+                            ),
+                          ),
+                          ?tabs,
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              );
-              // Clock on the left, the weather card on the right (the user's
-              // reference: a wall panel with a frosted weather tile). On its
-              // side the clock column is narrow, so the card goes under it.
-              // Standing, the weather goes on its own line under the date so
-              // the clock keeps the whole width.
-              final card = weather == null
-                  ? null
-                  : _weatherCard(weather, digitSize, night, inline: !landscape);
-              final faceAndWeather = card == null
-                  ? face
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        face,
-                        SizedBox(height: landscape ? gap * 2 : gap * 1.2),
-                        card,
-                      ],
-                    );
+                  ],
+                );
+              } else {
+                body = Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8 * s),
+                      child: header,
+                    ),
+                    SizedBox(height: 14 * s),
+                    face,
+                    SizedBox(height: 112 * s, child: picture),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: _panel(
+                          night: night,
+                          width: w - 2 * (driftX + pad),
+                          unit: unit,
+                        ),
+                      ),
+                    ),
+                    ?tabs,
+                  ],
+                );
+              }
 
               return _Look(
                 standby: _standby,
@@ -846,171 +808,66 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                   opacity: _pixelOpacity,
                   child: Stack(
                     children: [
-                      // Soft and edgeless, so it doesn't drift with the rest.
-                      Positioned.fill(
-                        child: _Backdrop(
-                          now: _now,
-                          night: night,
-                          raining: _raining,
-                          drift: Offset(_drift.dx * driftX, _drift.dy * driftY),
-                          home: _room == null && _rooms.length > 1,
-                          standby: _standby,
-                        ),
-                      ),
-                      // A plain jump, once a minute: a 20 s glide redrew the whole
-                      // screen at 60 fps for a third of every minute.
+                      // A plain jump, once a minute.
                       Transform.translate(
                         offset: Offset(_drift.dx * driftX, _drift.dy * driftY),
-                        child: Stack(
-                          children: [
-                            // Inset by the drift range so the face never wanders
-                            // off the panel edge.
-                            Positioned.fill(
-                              child: Padding(
-                                padding: EdgeInsets.fromLTRB(
-                                  driftX + 4,
-                                  driftY + 4,
-                                  driftX + 4,
-                                  driftY + 4,
-                                ),
-                                // The dashboard: the clock takes what the lights
-                                // leave — under it standing, beside it on its side.
-                                child: Flex(
-                                  direction: landscape
-                                      ? Axis.horizontal
-                                      : Axis.vertical,
-                                  children: [
-                                    Expanded(
-                                      child: FractionallySizedBox(
-                                        // Standing, 0.82: wider runs the top-right
-                                        // digit into a dark patch on this OLED.
-                                        widthFactor: landscape
-                                            ? _faceScale
-                                            : 0.82,
-                                        heightFactor: landscape
-                                            ? _faceScale
-                                            : 1,
-                                        // scaleDown fits the stack to that box: the time
-                                        // is what binds, so this fills it without ever
-                                        // wrapping or clipping.
-                                        child: FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: faceAndWeather,
-                                        ),
-                                      ),
-                                    ),
-                                    if (_rooms.length > 1 ||
-                                        !_rooms.first.isEmpty)
-                                      Padding(
-                                        padding: landscape
-                                            ? EdgeInsets.only(
-                                                left: barSpan * 0.04,
-                                              )
-                                            : EdgeInsets.only(
-                                                top: barSpan * 0.04,
-                                              ),
-                                        // Scrolls once there's more than fits. On
-                                        // its side the row bounds its height;
-                                        // standing, it leaves the clock at least
-                                        // 0.4 of the width in height (full width
-                                        // needs ~0.45, so it gives a little before
-                                        // the panel has to scroll).
-                                        child: ConstrainedBox(
-                                          constraints: BoxConstraints(
-                                            maxHeight: landscape
-                                                ? double.infinity
-                                                : max(
-                                                    0.0,
-                                                    h -
-                                                        2 * (driftY + 4) -
-                                                        barSpan * 0.04 -
-                                                        (w - 2 * (driftX + 4)) *
-                                                            0.4,
-                                                  ),
-                                          ),
-                                          child: SingleChildScrollView(
-                                            child: _panel(
-                                              night: night,
-                                              width: landscape
-                                                  ? barSpan * 0.034 * 26
-                                                  : w - 2 * (driftX + 4),
-                                              unit: barSpan * 0.034,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (_dimFrom != null)
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                top: barSpan * 0.08,
-                                child: Center(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.6,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(color: _surfaceEdge),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.brightness_6_rounded,
-                                          size: 18,
-                                          color: _white,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          '${(_dim * 100).round()}%',
-                                          style: const TextStyle(
-                                            color: _white,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (_showHint)
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                // Landscape leaves no headroom over the digits, so
-                                // the hint sits right at the edge and on one line.
-                                top: landscape ? 4.0 : barSpan * 0.08,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      'press & hold, then slide up / down to dim',
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.35,
-                                        ),
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            driftX + pad,
+                            driftY + pad,
+                            driftX + pad,
+                            driftY + 2 * s,
+                          ),
+                          child: body,
                         ),
                       ),
+                      if (_dimFrom != null)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: barSpan * 0.08,
+                          child: Center(
+                            child: _LuxCard(
+                              radius: 20,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.brightness_6_outlined,
+                                    size: 16,
+                                    color: _muted,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${(_dim * 100).round()}%',
+                                    style: const TextStyle(
+                                      color: _ivory,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (_showHint)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: 4 * s,
+                          child: Center(
+                            child: Text(
+                              'PRESS & HOLD, THEN SLIDE TO DIM',
+                              style: _caps(9 * s, spacing: 0.3),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1027,37 +884,11 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
 // Every device keeps its own colour, faint while off and glowing while on,
 // so what's on reads from across the room. The clock keeps white and red.
 const _warm = Color(0xFFFFB547);
-const _cool = Color(0xFFBFE0FF);
 const _tvViolet = Color(0xFFB69CFF);
 
-/// The set-top box's button — a sky blue beside the TV's violet.
-const _boxBlue = Color(0xFF5EC8FF);
 const _acCool = Color(0xFF4FD8EB);
-const _acHeat = Color(0xFFFF8A4C);
 
-/// Fans (Sonoff switches) — the mint of the AC's fan mode.
-const _fanGreen = Color(0xFF6EE7A0);
-
-/// The setpoint dial, 16° to 30°: cyan, mint, yellow, orange. Straight
-/// cyan-to-orange goes through grey in the middle.
-const _dialStops = [_acCool, Color(0xFF6EE7A0), Color(0xFFFFD166), _acHeat];
-
-/// AC mode colours, by Gree's mode number: auto, cool, dry, fan, heat.
-const _acModeHues = [
-  Color(0xFF5EEAD4),
-  _acCool,
-  Color(0xFF7CB8FF),
-  Color(0xFF6EE7A0),
-  _acHeat,
-];
 const _acModeNames = ['Auto', 'Cool', 'Dry', 'Fan', 'Heat'];
-const _acModeIcons = [
-  Icons.autorenew_rounded,
-  Icons.ac_unit_rounded,
-  Icons.water_drop_rounded,
-  Icons.air_rounded,
-  Icons.local_fire_department_rounded,
-];
 
 /// Night mode: every hue is pulled most of the way to this deep red.
 const _nightRed = Color(0xFFFF4A3D);
@@ -1069,13 +900,6 @@ Color _hue(Color c, bool night) => night ? Color.lerp(c, _nightRed, 0.8)! : c;
 /// Neutral surfaces for buttons that aren't a device's own colour.
 final _surface = _white.withValues(alpha: 0.06);
 final _surfaceEdge = _white.withValues(alpha: 0.10);
-
-/// A light's colour, read off its name: icy white for a "white" or "cool"
-/// light, warm amber for anything else.
-Color _glowFor(Light light) {
-  final name = light.name.toLowerCase();
-  return name.contains('white') || name.contains('cool') ? _cool : _warm;
-}
 
 /// Morning, the sun rising beside the clock: 06:00–11:00.
 bool _isMorning(DateTime t) =>
@@ -1091,171 +915,16 @@ bool _isDark(DateTime t) =>
     !const bool.fromEnvironment('FORCE_MORNING') &&
     (t.hour >= 19 || t.hour < 6);
 
-/// The sky behind everything, by time of day and weather — a static
-/// gradient and glows, with an animated [_Sky] over them:
-/// - after dark (19:00–06:00): near-black, drifting twinkling stars densest
-///   behind the clock, the odd shooting star, slow nebula glows;
-/// - morning (06:00–11:00): a sunrise wash, the sun rising beside the clock
-///   with slowly turning rays, drifting clouds, floating motes;
-/// - day (11:00–17:00): deep blue, the sun high and small, clouds, motes;
-/// - evening (17:00–19:00): violet into a sunset glow, pink clouds, motes;
-/// - raining: slate, dark clouds rolling, three layers of rain, splashes,
-///   now and then a lightning flash (faint at night).
-/// Everything with an edge keeps moving, so nothing burns into the OLED.
-class _Backdrop extends StatelessWidget {
-  const _Backdrop({
-    required this.now,
-    required this.night,
-    required this.raining,
-    required this.drift,
-    this.home = false,
-    this.standby = false,
-  });
-  final DateTime now;
-  final bool night;
-  final bool raining;
-  final Offset drift;
-
-  /// The home page is open: it has its own clip (the forest), whatever
-  /// the time or weather.
-  final bool home;
-
-  /// Standby: true black, nothing playing (the switcher fades to it).
-  final bool standby;
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = night || _isDark(now);
-    final _Scene scene;
-    final List<Color> sky;
-    final List<Widget> glows;
-    if (dark) {
-      scene = raining ? _Scene.nightRain : _Scene.night;
-      sky = const [Color(0xFF060818), Color(0xFF020308), Colors.black];
-      glows = [];
-    } else if (raining) {
-      scene = _Scene.rain;
-      sky = const [Color(0xFF1C2636), Color(0xFF101722), Color(0xFF0B1A22)];
-      glows = [
-        _glow(const Alignment(-0.8, -1), 1.4, const Color(0x664F7BA8)),
-        _glow(const Alignment(1.2, 0.6), 1.2, const Color(0x332A9D8F)),
-      ];
-    } else if (_isMorning(now)) {
-      scene = _Scene.morning;
-      sky = const [Color(0xFF3E1F48), Color(0xFF1D1638), Color(0xFF0B1C2E)];
-      glows = [
-        _glow(const Alignment(1.2, 0.15), 1.2, const Color(0x4D00B8A9)),
-        _glow(const Alignment(-0.6, 1.15), 1.3, const Color(0x47E0457B)),
-      ];
-    } else if (_isEvening(now)) {
-      scene = _Scene.evening;
-      sky = const [Color(0xFF241044), Color(0xFF1A0E2E), Color(0xFF3A1426)];
-      glows = [
-        _glow(const Alignment(-1.1, -0.8), 1.2, const Color(0x596A3DFF)),
-        _glow(const Alignment(0.6, 1.25), 1.5, const Color(0x73FF7A45)),
-        _glow(const Alignment(-0.8, 1.1), 1.2, const Color(0x59E0457B)),
-      ];
-    } else {
-      scene = _Scene.day;
-      sky = const [Color(0xFF0B3A73), Color(0xFF0B2350), Color(0xFF06283A)];
-      glows = [
-        _glow(const Alignment(1.2, 0.2), 1.2, const Color(0x4D22D3EE)),
-        _glow(const Alignment(-0.7, 1.15), 1.3, const Color(0x408B5CF6)),
-      ];
-    }
-    // Which of the user's clips: rainy whenever it rains, else sunny by
-    // day (mornings too — the user dropped the morning clip) and night
-    // after dark. The user wants a video at all times; rain after dark
-    // gets a much darker wash instead.
-    // The home page has its own clip, at any hour.
-    final clip = home
-        ? 'homescreen'
-        : raining
-        ? 'rainy'
-        : dark
-        ? 'night'
-        : 'sunny';
-    final drawnSky = _Sky(
-      scene: scene,
-      // 06:00 low on the left, 11:00 higher and further in.
-      sunRise: ((now.hour + now.minute / 60 - 6) / 5).clamp(0, 1),
-      // Night mode: everything bright in the sky goes softer.
-      dim: night,
-      drift: drift,
-    );
-    return AnimatedSwitcher(
-      duration: const Duration(seconds: 3),
-      child: standby
-          ? const ColoredBox(key: ValueKey('standby'), color: Colors.black)
-          : Stack(
-              key: ValueKey('$scene/$clip'),
-              children: [
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: sky,
-                      ),
-                    ),
-                  ),
-                ),
-                ...glows,
-                Positioned.fill(
-                  child: const bool.fromEnvironment('NO_VIDEO')
-                      ? drawnSky
-                      // The user's own clips play behind everything, falling
-                      // back to the drawn sky if one can't load.
-                      : _VideoSky(
-                          asset: 'assets/video/$clip.mp4',
-                          fallback: drawnSky,
-                          dim: night || (dark && (raining || home)),
-                          veryDark: dark && raining,
-                        ),
-                ),
-              ],
-            ),
-    );
-  }
-
-  static Widget _glow(Alignment at, double size, Color color) => Align(
-    alignment: at,
-    child: FractionallySizedBox(
-      widthFactor: size,
-      heightFactor: size,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
-        ),
-      ),
-    ),
-  );
-}
-
-enum _Scene { night, nightRain, rain, morning, day, evening }
-
-/// A looping, silent background video — the user's sunny / rainy clips,
-/// shrunk to 1280×720 at 15 fps (hardware-decoded; far cheaper than
-/// drawing). A dark wash over it keeps the clock and cards legible. Shows
+/// A looping, silent video — the user's sunny / rainy / night clips,
+/// shrunk to 1280×720 at 15 fps (hardware-decoded), now played only in the
+/// luxury face's picture strip. Shows
 /// [fallback] until the video is ready, or for good if it can't load (the
 /// clips are gitignored, so a fresh clone has none). Pauses whenever the
 /// app is off screen, and mixes with other audio so it never pauses music.
 class _VideoSky extends StatefulWidget {
-  const _VideoSky({
-    required this.asset,
-    required this.fallback,
-    this.dim = false,
-    this.veryDark = false,
-  });
+  const _VideoSky({required this.asset, required this.fallback});
   final String asset;
   final Widget fallback;
-
-  /// Night mode: a heavier dark wash.
-  final bool dim;
-
-  /// The bright rainy clip after dark: darker still.
-  final bool veryDark;
 
   @override
   State<_VideoSky> createState() => _VideoSkyState();
@@ -1323,474 +992,16 @@ class _VideoSkyState extends State<_VideoSky> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final video = _video;
     if (!_ready || video == null) return widget.fallback;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        FittedBox(
-          fit: BoxFit.cover,
-          clipBehavior: Clip.hardEdge,
-          child: SizedBox(
-            width: video.value.size.width,
-            height: video.value.size.height,
-            child: VideoPlayer(video),
-          ),
-        ),
-        // Darker at the top behind the clock and at the foot, lighter in
-        // between, so the bright footage doesn't swamp the dashboard.
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: widget.veryDark
-                  ? const [
-                      Color(0xE0000000),
-                      Color(0xCC000000),
-                      Color(0xE0000000),
-                    ]
-                  : widget.dim
-                  ? const [
-                      Color(0xB3000000),
-                      Color(0x8C000000),
-                      Color(0xB3000000),
-                    ]
-                  : const [
-                      Color(0x99000000),
-                      Color(0x59000000),
-                      Color(0x80000000),
-                    ],
-              stops: const [0, 0.45, 1],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The animated layer: one painter, redrawn ~30 times a second off a
-/// ticker (which Flutter pauses whenever the app isn't on screen). It
-/// repaints in its own layer without rebuilding any widgets.
-class _Sky extends StatefulWidget {
-  const _Sky({
-    required this.scene,
-    required this.sunRise,
-    required this.dim,
-    required this.drift,
-  });
-  final _Scene scene;
-  final double sunRise;
-  final bool dim;
-  final Offset drift;
-
-  @override
-  State<_Sky> createState() => _SkyState();
-}
-
-class _SkyState extends State<_Sky> with SingleTickerProviderStateMixin {
-  late final Ticker _ticker;
-  final _time = ValueNotifier<double>(0);
-  Duration _last = Duration.zero;
-
-  @override
-  void initState() {
-    super.initState();
-    // FREEZE_SKY=true (dart-define) draws one frame and stops — for
-    // measuring what the animation costs.
-    if (const bool.fromEnvironment('FREEZE_SKY')) {
-      _ticker = createTicker((_) {});
-      return;
-    }
-    _ticker = createTicker((elapsed) {
-      // One frame every 2 s. Smooth motion (20 fps) cost ~200–400 mA
-      // measured on the phone — more than slow wireless charging could
-      // cover, so the battery stalled; every 2 s is within noise of a
-      // frozen sky. Stars still twinkle, clouds and rain move in calm
-      // steps. SKY_FRAME_MS overrides it for testing.
-      if (elapsed - _last <
-          const Duration(
-            milliseconds: int.fromEnvironment(
-              'SKY_FRAME_MS',
-              defaultValue: 2000,
-            ),
-          )) {
-        return;
-      }
-      _last = elapsed;
-      _time.value = elapsed.inMicroseconds / 1e6;
-    })..start();
-  }
-
-  @override
-  void dispose() {
-    _ticker.dispose();
-    _time.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => RepaintBoundary(
-    child: CustomPaint(
-      size: Size.infinite,
-      painter: _SkyPainter(
-        scene: widget.scene,
-        sunRise: widget.sunRise,
-        dim: widget.dim,
-        drift: widget.drift,
-        time: _time,
+    return FittedBox(
+      fit: BoxFit.cover,
+      clipBehavior: Clip.hardEdge,
+      child: SizedBox(
+        width: video.value.size.width,
+        height: video.value.size.height,
+        child: VideoPlayer(video),
       ),
-    ),
-  );
-}
-
-class _SkyPainter extends CustomPainter {
-  _SkyPainter({
-    required this.scene,
-    required this.sunRise,
-    required this.dim,
-    required this.drift,
-    required this.time,
-  }) : super(repaint: time);
-
-  final _Scene scene;
-  final double sunRise;
-  final bool dim;
-  final Offset drift;
-  final ValueNotifier<double> time;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final t = time.value;
-    switch (scene) {
-      case _Scene.night:
-        _nebula(canvas, size, t);
-        _stars(canvas, size, t);
-        _shootingStar(canvas, size, t);
-      case _Scene.nightRain:
-        _clouds(canvas, size, t, const Color(0xFF4A5568), 0.45, top: true);
-        _rain(canvas, size, t, 0.45);
-        _lightning(canvas, size, t, dim ? 0.03 : 0.06);
-      case _Scene.rain:
-        _clouds(canvas, size, t, const Color(0xFF6E7D94), 0.6, top: true);
-        _rain(canvas, size, t, 1);
-        _lightning(canvas, size, t, 0.14);
-      case _Scene.morning:
-        _sun(canvas, size, t, sunRise, 1);
-        _clouds(canvas, size, t, const Color(0xFFFFE3D3), 0.38);
-        _motes(canvas, size, t, const Color(0xFFFFE2B8));
-      case _Scene.day:
-        _sun(canvas, size, t, 1, 0.75);
-        _clouds(canvas, size, t, const Color(0xFFF2F7FF), 0.4);
-        _motes(canvas, size, t, const Color(0xFFDDF4FF));
-      case _Scene.evening:
-        _clouds(canvas, size, t, const Color(0xFFFFB0C0), 0.38);
-        _motes(canvas, size, t, const Color(0xFFFFC2A8));
-    }
-  }
-
-  /// Stars that twinkle and pan slowly left, wrapping round; two in three
-  /// sit in the top third, around the clock. The bright ones get a halo
-  /// and a four-point glint.
-  void _stars(Canvas canvas, Size size, double t) {
-    final rng = Random(7);
-    final paint = Paint();
-    final glint = Paint()
-      ..strokeWidth = 0.8
-      ..strokeCap = StrokeCap.round;
-    final pan = t * 3;
-    for (var i = 0; i < 170; i++) {
-      final top = i % 3 != 0;
-      final x = (rng.nextDouble() * size.width - pan) % size.width;
-      final y = rng.nextDouble() * size.height * (top ? 0.36 : 1);
-      final p = Offset(x, y) + drift;
-      final big = rng.nextDouble() < 0.12;
-      final r = big ? 1.5 + rng.nextDouble() : 0.6 + rng.nextDouble() * 0.8;
-      final base = big ? 0.8 : 0.25 + rng.nextDouble() * 0.4;
-      final speed = 0.6 + rng.nextDouble() * 1.4;
-      final a = base * (0.5 + 0.5 * sin(t * speed + i * 1.7));
-      paint.color = const Color(0xFFFFF4E6).withValues(alpha: a);
-      canvas.drawCircle(p, r, paint);
-      if (big) {
-        paint.color = const Color(0xFFFFF4E6).withValues(alpha: a * 0.18);
-        canvas.drawCircle(p, r * 3.2, paint);
-        glint.color = const Color(0xFFFFF4E6).withValues(alpha: a * 0.5);
-        canvas.drawLine(p - Offset(r * 4, 0), p + Offset(r * 4, 0), glint);
-        canvas.drawLine(p - Offset(0, r * 4), p + Offset(0, r * 4), glint);
-      }
-    }
-  }
-
-  /// One shooting star every 23 s, across the top, gone in about a second.
-  void _shootingStar(Canvas canvas, Size size, double t) {
-    const period = 23.0;
-    const life = 1.1;
-    final n = (t / period).floor();
-    final u = (t - n * period) / life;
-    if (u > 1) return;
-    final rng = Random(n * 31 + 5);
-    final start = Offset(
-      size.width * (0.25 + rng.nextDouble() * 0.6),
-      size.height * rng.nextDouble() * 0.25,
-    );
-    const dir = Offset(-0.85, 0.5);
-    final head = start + dir * (size.width * 0.5 * u);
-    final tail = head - dir * (size.width * 0.18);
-    final fade = sin(u * pi); // in and out
-    canvas.drawLine(
-      tail,
-      head,
-      Paint()
-        ..strokeWidth = 1.6
-        ..strokeCap = StrokeCap.round
-        ..shader = LinearGradient(
-          colors: [
-            const Color(0x00FFFFFF),
-            Colors.white.withValues(alpha: 0.85 * fade),
-          ],
-        ).createShader(Rect.fromPoints(tail, head)),
-    );
-    canvas.drawCircle(
-      head,
-      2.2,
-      Paint()..color = Colors.white.withValues(alpha: 0.9 * fade),
     );
   }
-
-  /// Two faint violet and teal clouds of light wandering behind the stars.
-  void _nebula(Canvas canvas, Size size, double t) {
-    final s = max(size.width, size.height);
-    void blob(Offset c, double r, Color color) => canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..shader = RadialGradient(
-          colors: [color, color.withValues(alpha: 0)],
-        ).createShader(Rect.fromCircle(center: c, radius: r)),
-    );
-    blob(
-      Offset(
-        size.width * (0.3 + 0.15 * sin(t * 0.021)),
-        size.height * (0.25 + 0.08 * cos(t * 0.017)),
-      ),
-      s * 0.45,
-      const Color(0xFF5B3BC4).withValues(alpha: dim ? 0.06 : 0.1),
-    );
-    blob(
-      Offset(
-        size.width * (0.75 + 0.12 * cos(t * 0.015)),
-        size.height * (0.7 + 0.1 * sin(t * 0.019)),
-      ),
-      s * 0.4,
-      const Color(0xFF0E8C8C).withValues(alpha: dim ? 0.05 : 0.08),
-    );
-  }
-
-  /// Clouds drifting right. Each is a cluster of puffs — solid in the
-  /// middle, feathered at the edge — drawn into its own layer and faded as
-  /// one, so overlapping puffs don't stack into blotches. [top] keeps them
-  /// in the upper third (rain clouds).
-  void _clouds(
-    Canvas canvas,
-    Size size,
-    double t,
-    Color color,
-    double alpha, {
-    bool top = false,
-  }) {
-    // Puff layout in units of the cloud's width: (dx, dy, radius).
-    const puffs = [
-      (-0.36, 0.06, 0.19),
-      (-0.18, -0.06, 0.25),
-      (0.04, -0.14, 0.3),
-      (0.26, -0.04, 0.24),
-      (0.4, 0.07, 0.17),
-      (-0.06, 0.1, 0.26),
-      (0.2, 0.11, 0.22),
-    ];
-    final rng = Random(3);
-    final a = alpha * (dim ? 0.5 : 1);
-    for (var i = 0; i < 6; i++) {
-      final w =
-          size.width * (top ? 0.42 : 0.3) * (0.7 + rng.nextDouble() * 0.5);
-      final speed = 5 + rng.nextDouble() * 9;
-      final span = size.width + w * 1.6;
-      final x = (rng.nextDouble() * span + t * speed) % span - w * 0.8;
-      final y =
-          size.height *
-          (top
-              ? 0.02 + rng.nextDouble() * 0.2
-              : 0.03 + rng.nextDouble() * 0.27);
-      final layerAlpha = a * (0.55 + rng.nextDouble() * 0.45);
-      final bounds = Rect.fromCenter(
-        center: Offset(x, y),
-        width: w * 1.6,
-        height: w * 0.9,
-      );
-      canvas.saveLayer(
-        bounds,
-        Paint()..color = Colors.white.withValues(alpha: layerAlpha),
-      );
-      for (final (dx, dy, pr) in puffs) {
-        final c = Offset(x + dx * w, y + dy * w);
-        final r = pr * w;
-        canvas.drawCircle(
-          c,
-          r,
-          Paint()
-            ..shader = RadialGradient(
-              colors: [color, color, color.withValues(alpha: 0)],
-              stops: const [0, 0.62, 1],
-            ).createShader(Rect.fromCircle(center: c, radius: r)),
-        );
-      }
-      canvas.restore();
-    }
-  }
-
-  /// Rain in three layers — far drops thin, short and slow, near ones
-  /// long, bright and fast — and splashes rippling out low on the screen.
-  void _rain(Canvas canvas, Size size, double t, double opacity) {
-    final rng = Random(11);
-    final paint = Paint()..strokeCap = StrokeCap.round;
-    const slant = -0.18;
-    for (final (count, speed, length, width, alpha) in const [
-      (70, 380.0, 12.0, 0.8, 0.12),
-      (55, 620.0, 18.0, 1.1, 0.2),
-      (30, 900.0, 28.0, 1.5, 0.3),
-    ]) {
-      paint.strokeWidth = width;
-      for (var i = 0; i < count; i++) {
-        final v = speed * (0.85 + rng.nextDouble() * 0.3);
-        final span = size.height + length;
-        final y = (rng.nextDouble() * span + t * v) % span - length;
-        final x = rng.nextDouble() * (size.width + 80) + y * slant;
-        paint.color = const Color(
-          0xFFBFD9FF,
-        ).withValues(alpha: alpha * opacity * (0.7 + rng.nextDouble() * 0.6));
-        canvas.drawLine(
-          Offset(x, y),
-          Offset(x + length * slant, y + length),
-          paint,
-        );
-      }
-    }
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    for (var i = 0; i < 26; i++) {
-      final period = 0.7 + rng.nextDouble() * 0.8;
-      final phase = rng.nextDouble() * period;
-      final u = ((t + phase) % period) / period;
-      final c = Offset(
-        rng.nextDouble() * size.width,
-        size.height * (0.8 + rng.nextDouble() * 0.2),
-      );
-      ring.color = const Color(
-        0xFFBFD9FF,
-      ).withValues(alpha: (1 - u) * 0.3 * opacity);
-      canvas.drawOval(
-        Rect.fromCenter(center: c, width: 4 + u * 22, height: 1.5 + u * 6),
-        ring,
-      );
-    }
-  }
-
-  /// A lightning flash every 41 s: two quick pulses lighting the sky.
-  void _lightning(Canvas canvas, Size size, double t, double strength) {
-    final u = t % 41;
-    double pulse(double at) => max(0, 1 - (u - at).abs() / 0.07);
-    final f = max(pulse(0.1), pulse(0.32) * 0.7);
-    if (f <= 0) return;
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xFFDDE8FF).withValues(alpha: f * strength),
-    );
-  }
-
-  /// The sun up and left of the clock (never top-right — dead OLED patch):
-  /// a breathing haze, slowly turning rays, a corona and a warm disc.
-  void _sun(Canvas canvas, Size size, double t, double rise, double scale) {
-    final short = min(size.width, size.height) * scale;
-    final landscape = size.width > size.height;
-    final c = Offset(
-      size.width * (landscape ? 0.08 + 0.1 * rise : 0.1 + 0.08 * rise),
-      size.height * (landscape ? 0.35 - 0.2 * rise : 0.09 - 0.04 * rise),
-    );
-    final breathe = 1 + 0.05 * sin(t * 0.7);
-    void disc(double r, List<Color> colors, [List<double>? stops]) {
-      canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..shader = RadialGradient(
-            colors: colors,
-            stops: stops,
-          ).createShader(Rect.fromCircle(center: c, radius: r)),
-      );
-    }
-
-    disc(short * 0.9 * breathe, const [
-      Color(0x47FF9E5E),
-      Color(0x14FF6F61),
-      Color(0x00FF6F61),
-    ]);
-    // Rays: long thin wedges, turning a full circle every ~3 minutes.
-    final rays = Paint()
-      ..shader = RadialGradient(
-        colors: const [Color(0x24FFD48A), Color(0x00FFD48A)],
-      ).createShader(Rect.fromCircle(center: c, radius: short * 0.5));
-    for (var i = 0; i < 12; i++) {
-      final a = t * 0.035 + i * pi / 6;
-      // Short, so none reaches the dead top-right patch.
-      final len = short * (i.isEven ? 0.5 : 0.36);
-      final path = Path()
-        ..moveTo(c.dx, c.dy)
-        ..lineTo(c.dx + cos(a - 0.05) * len, c.dy + sin(a - 0.05) * len)
-        ..lineTo(c.dx + cos(a + 0.05) * len, c.dy + sin(a + 0.05) * len)
-        ..close();
-      canvas.drawPath(path, rays);
-    }
-    disc(short * 0.28 * breathe, const [Color(0x73FFD48A), Color(0x00FFB86B)]);
-    disc(
-      short * 0.085,
-      const [Color(0xFFFFF1C9), Color(0xFFFFC56B), Color(0x00FFB04A)],
-      const [0, 0.75, 1],
-    );
-  }
-
-  /// Soft motes of light drifting slowly upward, swaying as they go.
-  void _motes(Canvas canvas, Size size, double t, Color color) {
-    final rng = Random(19);
-    for (var i = 0; i < 24; i++) {
-      final speed = 6 + rng.nextDouble() * 12;
-      final span = size.height + 40;
-      final y = size.height + 20 - (rng.nextDouble() * span + t * speed) % span;
-      final x =
-          rng.nextDouble() * size.width +
-          sin(t * (0.3 + rng.nextDouble() * 0.4) + i) * 14;
-      final r = 2 + rng.nextDouble() * 5;
-      final a = (0.06 + rng.nextDouble() * 0.12) * (dim ? 0.5 : 1);
-      final c = Offset(x, y);
-      canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..shader = RadialGradient(
-            colors: [
-              color.withValues(alpha: a),
-              color.withValues(alpha: 0),
-            ],
-          ).createShader(Rect.fromCircle(center: c, radius: r)),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_SkyPainter old) =>
-      old.scene != scene ||
-      old.sunRise != sunRise ||
-      old.dim != dim ||
-      old.drift != drift;
 }
 
 /// The look the dashboard is in — standby (true black, flat cards) or the
@@ -1819,11 +1030,10 @@ class _GlowCard extends StatelessWidget {
     this.width,
     this.height,
     this.alert = false,
-    this.padding = 1.1,
   });
 
   /// Inner padding, in units.
-  final double padding;
+  final double padding = 1.1;
 
   final Color hue;
   final bool on;
@@ -2273,218 +1483,6 @@ Color _kelvinColor(int kelvin) {
     const Color(0xFFA8D4FF),
     coolness * 0.7,
   )!;
-}
-
-/// The lightbox's shadow box: a frame, four walls in perspective and a
-/// back wall. Dark glass when off; on, the light's colour pools on the
-/// back wall around the bulb and spills onto the floor and walls.
-class _LightBoxPainter extends CustomPainter {
-  _LightBoxPainter({
-    required this.hue,
-    required this.on,
-    required this.level,
-    required this.offline,
-    required this.unit,
-  });
-
-  final Color hue;
-  final bool on;
-  final double level;
-  final bool offline;
-  final double unit;
-
-  /// The opening inside the frame.
-  static Rect opening(Rect r, double u) => r.deflate(u * 0.55);
-
-  /// The back wall, set back from the opening (seen a little from above).
-  static Rect backWall(Rect r, double u) {
-    final o = opening(r, u);
-    final d = o.shortestSide * 0.12;
-    return Rect.fromLTRB(
-      o.left + d,
-      o.top + d * 0.8,
-      o.right - d,
-      o.bottom - d * 1.3,
-    );
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = Offset.zero & size;
-    final u = unit;
-    final o = opening(r, u), b = backWall(r, u);
-    final glow = on ? (0.35 + 0.65 * level) : 0.0;
-    Color wall(double shade) => Color.alphaBlend(
-      hue.withValues(alpha: glow * 0.45 * shade),
-      Color.lerp(const Color(0xFF15171C), const Color(0xFF2A2D35), shade)!,
-    );
-
-    // Frame: a faint lit edge, like the box's white rim.
-    final frame = RRect.fromRectAndRadius(r, Radius.circular(u * 0.9));
-    canvas.drawRRect(
-      frame,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.alphaBlend(
-              hue.withValues(alpha: glow * 0.25),
-              _white.withValues(alpha: 0.16),
-            ),
-            _white.withValues(alpha: 0.05),
-          ],
-        ).createShader(r),
-    );
-    canvas.save();
-    canvas.clipRRect(RRect.fromRectAndRadius(o, Radius.circular(u * 0.4)));
-    Path quad(Offset a, Offset b2, Offset c, Offset d) => Path()
-      ..moveTo(a.dx, a.dy)
-      ..lineTo(b2.dx, b2.dy)
-      ..lineTo(c.dx, c.dy)
-      ..lineTo(d.dx, d.dy)
-      ..close();
-    // Ceiling (darkest), sides, floor (catches the most light).
-    canvas.drawPath(
-      quad(o.topLeft, o.topRight, b.topRight, b.topLeft),
-      Paint()..color = wall(0.15),
-    );
-    canvas.drawPath(
-      quad(o.topLeft, b.topLeft, b.bottomLeft, o.bottomLeft),
-      Paint()..color = wall(0.45),
-    );
-    canvas.drawPath(
-      quad(o.topRight, o.bottomRight, b.bottomRight, b.topRight),
-      Paint()..color = wall(0.35),
-    );
-    canvas.drawPath(
-      quad(b.bottomLeft, b.bottomRight, o.bottomRight, o.bottomLeft),
-      Paint()..color = wall(0.75),
-    );
-    // Back wall, with the bulb's pool of light.
-    canvas.drawRect(b, Paint()..color = wall(0.55));
-    if (on) {
-      final c = Offset(b.left + b.width * 0.62, b.top + b.height * 0.42);
-      final rad = b.longestSide * (0.55 + 0.35 * level);
-      canvas.drawCircle(
-        c,
-        rad,
-        Paint()
-          ..shader = RadialGradient(
-            colors: [
-              Color.lerp(hue, Colors.white, 0.35)!.withValues(alpha: glow),
-              hue.withValues(alpha: 0.4 * glow),
-              hue.withValues(alpha: 0),
-            ],
-            stops: const [0, 0.45, 1],
-          ).createShader(Rect.fromCircle(center: c, radius: rad)),
-      );
-    }
-    // Soft shade where the walls meet the back.
-    canvas.drawRect(
-      b,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = Colors.black.withValues(alpha: 0.25),
-    );
-    canvas.restore();
-    if (offline) {
-      canvas.drawRRect(
-        frame.deflate(0.6),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2
-          ..color = _red.withValues(alpha: 0.5),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_LightBoxPainter old) =>
-      old.hue != hue ||
-      old.on != on ||
-      old.level != level ||
-      old.offline != offline ||
-      old.unit != unit;
-}
-
-/// A rocker wall switch: up and lit in the light's colour when on, down
-/// and dark when off. A spinner sits on it while a command is out.
-class _WallSwitch extends StatelessWidget {
-  const _WallSwitch({required this.on, required this.hue, required this.busy});
-  final bool on;
-  final Color hue;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, c) {
-      final w = c.maxWidth, h = c.maxHeight;
-      return Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(w * 0.14),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              _white.withValues(alpha: 0.22),
-              _white.withValues(alpha: 0.08),
-            ],
-          ),
-          border: Border.all(color: _white.withValues(alpha: 0.18)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: w * 0.2,
-              offset: Offset(w * 0.05, w * 0.08),
-            ),
-          ],
-        ),
-        alignment: Alignment.center,
-        child: Container(
-          width: w * 0.42,
-          height: h * 0.52,
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(w * 0.08),
-          ),
-          padding: EdgeInsets.all(w * 0.04),
-          child: busy
-              ? Center(
-                  child: SizedBox.square(
-                    dimension: w * 0.3,
-                    child: CircularProgressIndicator(
-                      strokeWidth: w * 0.05,
-                      color: _white,
-                    ),
-                  ),
-                )
-              : AnimatedAlign(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOut,
-                  alignment: on ? Alignment.topCenter : Alignment.bottomCenter,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    height: h * 0.27,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(w * 0.06),
-                      color: on ? hue : _white.withValues(alpha: 0.55),
-                      boxShadow: on
-                          ? [
-                              BoxShadow(
-                                color: hue.withValues(alpha: 0.7),
-                                blurRadius: w * 0.25,
-                              ),
-                            ]
-                          : null,
-                    ),
-                  ),
-                ),
-        ),
-      );
-    },
-  );
 }
 
 /// A card's 1.2 px border, [color] at the top-left corner fading to a
@@ -3515,16 +2513,14 @@ class _StatusBar extends StatelessWidget {
     required this.unit,
     required this.night,
     required this.connected,
-    this.checking = false,
-    this.down = const [],
     this.offlineLabel = 'No devices answering',
   });
 
   final double unit;
   final bool night;
   final bool connected;
-  final bool checking;
-  final List<String> down;
+  final bool checking = false;
+  final List<String> down = const [];
   final String offlineLabel;
 
   @override
@@ -4595,7 +3591,6 @@ class _PanelHeader extends StatelessWidget {
     required this.icon,
     this.subtitle,
     this.onTap,
-    this.trailing = const [],
   });
 
   final double unit;
@@ -4604,7 +3599,7 @@ class _PanelHeader extends StatelessWidget {
   final String? subtitle;
   final IconData icon;
   final VoidCallback? onTap;
-  final List<Widget> trailing;
+  final List<Widget> trailing = const [];
 
   @override
   Widget build(BuildContext context) {
@@ -4999,264 +3994,328 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
     if (mounted) setState(() => _scene = null);
   }
 
+  /// The light the dimmer row works on: the last tile tapped, or its name
+  /// in the row tapped to move to the next (the user, 10 Nov 2026).
+  Light? _dimTarget;
+
+  /// Mock-up pixels to this panel's size (unit is 0.034 of the short side;
+  /// the mock-up was drawn 411 wide).
+  double get _s => widget.unit / (411 * 0.034);
+
   @override
   Widget build(BuildContext context) {
-    final u = widget.unit;
-    final gap = u * 0.8;
-    // Square tiles, two to a row.
-    final tile = (widget.width - gap) / 2;
+    final s = _s;
+    final gap = 10 * s;
+    final gold = _goldFor(widget.night);
+    final half = (widget.width - 12 * s) / 2;
+    final third = (widget.width - 2 * 8 * s) / 3;
+    final empty =
+        widget.lights.isEmpty &&
+        widget.acs.isEmpty &&
+        widget.tvs.isEmpty &&
+        widget.boxes.isEmpty &&
+        widget.switches.isEmpty;
+    // Scenes, as text — only in the room that has their devices.
+    Widget scene(String label, IconData icon, bool goodNight) =>
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _scene == null ? () => _runScene(goodNight) : null,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 300),
+            opacity: _scene == null ? 1 : 0.4,
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8 * s),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 12 * s, color: goodNight ? _muted : gold),
+                  SizedBox(width: 6 * s),
+                  Text(
+                    label,
+                    style: _caps(
+                      10 * s,
+                      color: goodNight ? _muted : gold,
+                      spacing: 0.25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
     return SizedBox(
       width: widget.width,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PanelHeader(
-            unit: u,
-            night: widget.night,
-            title: widget.title ?? 'ROOM DASHBOARD',
-            subtitle: widget.title == null ? null : widget.subtitle,
-            icon: Icons.home_rounded,
-            onTap: widget.onHome,
-            trailing: [
-              // Scenes (good night, good morning) — only in the room
-              // that has their devices.
+          // Lights first: the user uses them most, then the AC, then TV.
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.lights.isNotEmpty ? 'LIGHTS' : '',
+                  style: _caps(9.5 * s, spacing: 0.32),
+                ),
+              ),
               if (_hasScenes) ...[
-                _pill(
-                  Icons.bedtime_rounded,
-                  'GN',
-                  night: true,
-                  enabled: _scene == null,
-                  onTap: () => _runScene(true),
-                ),
-                SizedBox(width: u * 0.5),
-                _pill(
-                  Icons.wb_sunny_rounded,
-                  'GM',
-                  night: false,
-                  enabled: _scene == null,
-                  onTap: () => _runScene(false),
-                ),
+                scene('NIGHT', Icons.bedtime_outlined, true),
+                SizedBox(width: 18 * s),
+                scene('MORNING', Icons.wb_sunny_outlined, false),
               ],
             ],
           ),
-          if (widget.lights.isEmpty &&
-              widget.acs.isEmpty &&
-              widget.tvs.isEmpty &&
-              widget.boxes.isEmpty &&
-              widget.switches.isEmpty) ...[
-            SizedBox(height: gap),
-            _GlowCard(
-              hue: _hue(_warm, widget.night),
-              on: false,
-              unit: u,
-              width: widget.width,
+          if (empty)
+            Padding(
+              padding: EdgeInsets.only(top: gap),
               child: Text(
-                'Nothing to control here yet',
-                style: TextStyle(
-                  color: _white.withValues(alpha: 0.5),
-                  fontSize: u * 0.8,
-                ),
+                'NOTHING TO CONTROL HERE YET',
+                style: _caps(10 * s, spacing: 0.3),
               ),
             ),
-          ],
-          SizedBox(height: gap),
+          SizedBox(height: 4 * s),
           Wrap(
-            spacing: gap,
-            runSpacing: gap,
-            children: [for (final light in widget.lights) _tile(light, tile)],
+            spacing: 12 * s,
+            runSpacing: 12 * s,
+            children: [for (final light in widget.lights) _tile(light, half)],
           ),
-          // Switches three to a row; with more than three, fans get a
-          // row of their own.
-          for (final group
-              in widget.switches.length <= 3
-                  ? [
-                      [
-                        ...widget.switches.where((s) => s.isFan),
-                        ...widget.switches.where((s) => !s.isFan),
-                      ],
-                    ]
-                  : [
-                      for (final fans in [true, false])
-                        [...widget.switches.where((s) => s.isFan == fans)],
-                    ])
-            if (group.isNotEmpty) ...[
-              SizedBox(height: gap),
-              Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: [
-                  for (final s in group)
-                    _switchTile(s, (widget.width - gap * 2) / 3),
-                ],
-              ),
-            ],
-          if (widget.acs.isNotEmpty) ...[
+          if (widget.lights.any((l) => l.dimmable)) ...[
+            SizedBox(height: gap),
+            _dimmerRow(),
+          ],
+          if (widget.switches.isNotEmpty) ...[
             SizedBox(height: gap),
             Wrap(
-              spacing: gap,
-              runSpacing: gap,
+              spacing: 8 * s,
+              runSpacing: 8 * s,
               children: [
-                for (final ac in widget.acs)
-                  AcPanel(
-                    ac: ac,
-                    // Alone in its room, the AC gets the whole width.
-                    wide: widget.acs.length == 1,
-                    width: widget.acs.length == 1 ? widget.width : tile,
-                    unit: u,
-                    night: widget.night,
-                    nudge: _acNudge,
-                    onOffline: (off) => setState(
-                      () => off ? _acOffline.add(ac) : _acOffline.remove(ac),
-                    ),
-                  ),
+                for (final sw in [
+                  ...widget.switches.where((s) => s.isFan),
+                  ...widget.switches.where((s) => !s.isFan),
+                ])
+                  _switchTile(sw, third),
               ],
+            ),
+          ],
+          for (final ac in widget.acs) ...[
+            SizedBox(height: 12 * s),
+            AcPanel(
+              ac: ac,
+              wide: true,
+              width: widget.width,
+              unit: widget.unit,
+              night: widget.night,
+              nudge: _acNudge,
+              onOffline: (off) => setState(
+                () => off ? _acOffline.add(ac) : _acOffline.remove(ac),
+              ),
             ),
           ],
           if (widget.tvs.isNotEmpty || widget.boxes.isNotEmpty) ...[
             SizedBox(height: gap),
             _tvCard(widget.tvs.firstOrNull, widget.boxes.firstOrNull),
           ],
-          if (widget.lights.isNotEmpty ||
-              widget.acs.isNotEmpty ||
-              widget.tvs.isNotEmpty ||
-              widget.boxes.isNotEmpty ||
-              widget.switches.isNotEmpty) ...[
-            SizedBox(height: gap),
-            _statusLine(),
-          ],
+          SizedBox(height: gap),
         ],
       ),
     );
   }
 
-  /// A light as a lightbox (from a Rive design the user picked, Oct 2026 —
-  /// "Lightbox" by Gary Simon, CC BY 4.0): a shadow box holding a wall
-  /// switch and a bulb. The switch — or anywhere in the box — turns it on
-  /// or off; on, the bulb lights and its glow fills the box, brighter with
-  /// the level. A bulb with a colour temperature (the Yeelight) gets a
-  /// warm-to-cool strip across the top of the box. Under it the name and
-  /// state, then the 1 / 25 / 50 / 100% presets.
-  Widget _tile(Light light, double size) {
-    final u = widget.unit;
+  /// A light: a big tile — the icon, its name and state. Tapping it turns
+  /// it on or off and makes it the dimmer row's light; one with a colour
+  /// temperature (the Yeelight) opens its sheet on press and hold.
+  Widget _tile(Light light, double width) {
+    final s = _s;
     final state = _states[light];
     final on = state?.on == true;
     final level = state?.brightness;
     final offline = _offline.contains(light);
     final busy = _busy.contains(light);
-    final kelvin = state?.kelvin;
-    final glow = light.hasKelvin && kelvin != null
-        ? _kelvinColor(kelvin)
-        : _glowFor(light);
-    final hue = _hue(glow, widget.night);
+    final gold = _goldFor(widget.night);
+    final lit = on && !offline;
     final status = offline
-        ? 'Offline'
+        ? 'OFFLINE'
         : state == null
-        ? 'Connecting…'
+        ? 'CONNECTING'
         : on
-        ? (light.dimmable && level != null ? 'On · $level%' : 'On')
-        : 'Off';
-
-    final box = GestureDetector(
+        ? (light.dimmable && level != null ? 'ON  ·  $level%' : 'ON')
+        : 'OFF';
+    return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: busy || state == null
-          ? null
-          : () => _run(
-              light,
-              () => light.setPower(!on),
-              LightState(!on, level, state.kelvin),
-            ),
-      // Press and hold a bulb with a colour temperature for its sheet.
+      onTap: () {
+        if (light.dimmable) setState(() => _dimTarget = light);
+        if (busy || state == null) return;
+        _run(
+          light,
+          () => light.setPower(!on),
+          LightState(!on, level, state.kelvin),
+        );
+      },
       onLongPress: light.hasKelvin && state != null
           ? () => _openKelvin(light)
           : null,
-      child: CustomPaint(
-        painter: _LightBoxPainter(
-          hue: hue,
-          on: on,
-          level: (level ?? 100) / 100,
-          offline: offline,
-          unit: u,
-        ),
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final inner = _LightBoxPainter.backWall(Offset.zero & c.biggest, u);
-            final bulbH = inner.height * 0.86;
-            return Stack(
+      child: _LuxCard(
+        width: width,
+        height: 108 * s,
+        radius: 20 * s,
+        lit: lit ? gold : null,
+        alert: offline,
+        padding: EdgeInsets.fromLTRB(18 * s, 16 * s, 16 * s, 14 * s),
+        child: Stack(
+          children: [
+            if (lit) Positioned(top: 0, right: 0, child: _luxDot(gold, 5 * s)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // The wall switch, left of the bulb.
-                Positioned(
-                  left: inner.left + inner.width * 0.12,
-                  top: inner.center.dy - inner.height * 0.24,
-                  width: inner.height * 0.32,
-                  height: inner.height * 0.48,
-                  child: _WallSwitch(on: on, hue: hue, busy: busy),
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedBulb,
+                  size: 26 * s,
+                  color: lit ? gold : _muted,
+                  strokeWidth: 1.2,
                 ),
-                // The bulb, hanging in the right of the box.
-                Positioned(
-                  left: inner.left + inner.width * 0.62 - bulbH * 0.3,
-                  top: inner.bottom - bulbH - inner.height * 0.02,
-                  width: bulbH * 0.6,
-                  height: bulbH,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 400),
-                    child: Image.asset(
-                      on
-                          ? 'assets/images/bulb_lit.png'
-                          : 'assets/images/bulb_unlit.png',
-                      key: ValueKey(on),
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.medium,
-                      opacity: AlwaysStoppedAnimation(on ? 1 : 0.55),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      light.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _ivory,
+                        fontSize: 15 * s,
+                        fontWeight: FontWeight.w400,
+                        height: 1.2,
+                      ),
                     ),
-                  ),
+                    SizedBox(height: 4 * s),
+                    Text(
+                      status,
+                      style: _caps(
+                        9.5 * s,
+                        color: offline
+                            ? _red
+                            : lit
+                            ? gold
+                            : _muted,
+                        spacing: 0.26,
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
+  }
 
-    return _GlowCard(
-      hue: hue,
-      on: on,
-      unit: u,
-      width: size,
-      height: size * 1.32,
-      alert: offline,
-      padding: 0.8,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  /// The dimmer row: the light's name in gold (tap it to move to the next
+  /// dimmable light) and 1 · 25 · 50 · 100, the nearest one to its level
+  /// underlined in gold. A level turns the light on.
+  Widget _dimmerRow() {
+    final s = _s;
+    final gold = _goldFor(widget.night);
+    final dimmable = widget.lights.where((l) => l.dimmable).toList();
+    var target = _dimTarget;
+    if (target == null || !dimmable.contains(target)) {
+      target = dimmable.firstWhere(
+        (l) => _states[l]?.on == true,
+        orElse: () => dimmable.first,
+      );
+    }
+    final light = target;
+    final state = _states[light];
+    final on = state?.on == true;
+    final level = state?.brightness;
+    final busy = _busy.contains(light);
+    final nearest = level == null
+        ? null
+        : _presets.reduce(
+            (a, b) => (a - level).abs() <= (b - level).abs() ? a : b,
+          );
+    return _LuxCard(
+      height: 46 * s,
+      radius: 23 * s,
+      padding: EdgeInsets.only(left: 18 * s, right: 6 * s),
+      child: Row(
         children: [
-          Expanded(child: box),
-          SizedBox(height: u * 0.5),
-          Text(
-            light.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: _white,
-              fontSize: u * 0.95,
-              fontWeight: FontWeight.w500,
-              height: 1.2,
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: dimmable.length < 2
+                  ? null
+                  : () => setState(
+                      () => _dimTarget =
+                          dimmable[(dimmable.indexOf(light) + 1) %
+                              dimmable.length],
+                    ),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      light.name.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _caps(9.5 * s, color: gold, spacing: 0.3),
+                    ),
+                  ),
+                  if (dimmable.length > 1) ...[
+                    SizedBox(width: 4 * s),
+                    Icon(
+                      Icons.unfold_more_rounded,
+                      size: 13 * s,
+                      color: _muted,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
-          Text(
-            status,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: offline ? _red : _white.withValues(alpha: on ? 0.75 : 0.5),
-              fontSize: u * 0.7,
-              fontWeight: FontWeight.w500,
-              height: 1.3,
+          for (final pct in _presets)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: busy || state == null
+                  ? null
+                  : () => _run(
+                      light,
+                      () => light.setBrightness(pct),
+                      LightState(true, pct, state.kelvin),
+                    ),
+              child: SizedBox(
+                width: (pct == 100 ? 52 : 44) * s,
+                height: 44 * s,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '$pct',
+                      style: TextStyle(
+                        color: on && pct == nearest ? _ivory : _muted,
+                        fontSize: 13 * s,
+                        fontWeight: on && pct == nearest
+                            ? FontWeight.w400
+                            : FontWeight.w300,
+                        letterSpacing: s,
+                      ),
+                    ),
+                    SizedBox(height: 5 * s),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: 18 * s,
+                      height: 1,
+                      decoration: BoxDecoration(
+                        color: on && pct == nearest ? gold : Colors.transparent,
+                        boxShadow: on && pct == nearest
+                            ? [BoxShadow(color: gold, blurRadius: 6 * s)]
+                            : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          if (light.dimmable) ...[
-            SizedBox(height: u * 0.5),
-            _presetBar(light, hue, on: on, level: level, busy: busy),
-          ],
         ],
       ),
     );
@@ -5284,9 +4343,6 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
     _refresh(light);
   }
 
-  /// A Sonoff switch: a small button with a fan or lamp icon, its name and
-  /// state. Not wired up yet — every one reads "Not set up" and does
-  /// nothing when tapped.
   /// A switch's name without its room's prefix: "Haam's Ceiling 1" reads
   /// "Ceiling 1" in Haam's Room, "Kitchen Fan" reads "Fan" in the Kitchen.
   /// (Names are unique across the house; the prefix just repeats the room.)
@@ -5296,8 +4352,10 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
     return name.substring(room.length + 1);
   }
 
-  Widget _switchTile(SonoffSwitch sw, double size) {
-    final u = widget.unit;
+  /// A Sonoff switch: a small tile with its icon and name. Not wired up yet
+  /// — greyed, and a tap does nothing.
+  Widget _switchTile(SonoffSwitch sw, double width) {
+    final s = _s;
     final n = sw.name.toLowerCase();
     // Hugeicons, picked by the user's naming.
     final icon = sw.isFan
@@ -5311,65 +4369,29 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
         : n.contains('ceiling')
         ? HugeIcons.strokeRoundedLampCeiling
         : HugeIcons.strokeRoundedBulb;
-    final hue = _hue(sw.isFan ? _fanGreen : _warm, widget.night);
-    return _GlowCard(
-      hue: hue,
-      on: false,
-      unit: u,
-      width: size,
-      height: size * 0.82,
-      padding: 0.8,
-      child: Opacity(
-        opacity: sw.isSetUp ? 1 : 0.55,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Opacity(
+      opacity: sw.isSetUp ? 1 : 0.6,
+      child: _LuxCard(
+        width: width,
+        height: 48 * s,
+        radius: 16 * s,
+        padding: EdgeInsets.symmetric(horizontal: 8 * s),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: u * 2.2,
-                  height: u * 2.2,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _white.withValues(alpha: 0.07),
-                    borderRadius: BorderRadius.circular(u * 0.7),
-                  ),
-                  child: HugeIcon(icon: icon, size: u * 1.4, color: hue),
+            HugeIcon(icon: icon, size: 17 * s, color: _muted, strokeWidth: 1.2),
+            SizedBox(width: 7 * s),
+            Flexible(
+              child: Text(
+                _shortName(sw.name),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: _muted,
+                  fontSize: 11 * s,
+                  fontWeight: FontWeight.w400,
                 ),
-                Icon(
-                  Icons.power_settings_new_rounded,
-                  size: u * 1.0,
-                  color: _white.withValues(alpha: 0.4),
-                ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _shortName(sw.name),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: _white,
-                    fontSize: u * 0.78,
-                    fontWeight: FontWeight.w500,
-                    height: 1.2,
-                  ),
-                ),
-                Text(
-                  sw.isSetUp ? 'Off' : 'Not set up',
-                  maxLines: 1,
-                  style: TextStyle(
-                    color: _white.withValues(alpha: 0.5),
-                    fontSize: u * 0.62,
-                    fontWeight: FontWeight.w500,
-                    height: 1.3,
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -5377,288 +4399,79 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
     );
   }
 
-  /// 1 · 25 · 50 · 100 in one pill, with a highlight that slides to the
-  /// preset nearest the bulb's level (set elsewhere, it rarely lands on one).
-  Widget _presetBar(
-    Light light,
-    Color hue, {
-    required bool on,
-    required int? level,
-    required bool busy,
-  }) {
-    final u = widget.unit;
-    final nearest = level == null
-        ? null
-        : _presets.reduce(
-            (a, b) => (a - level).abs() <= (b - level).abs() ? a : b,
-          );
-    final index = on && nearest != null ? _presets.indexOf(nearest) : null;
-    final r = BorderRadius.circular(u * 1.3);
-    return Container(
-      height: u * 3,
-      padding: EdgeInsets.all(u * 0.22),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: r,
-        border: Border.all(color: _surfaceEdge),
-      ),
-      child: Stack(
-        children: [
-          if (index != null)
-            AnimatedAlign(
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment(-1 + 2 * index / (_presets.length - 1), 0),
-              child: FractionallySizedBox(
-                widthFactor: 1 / _presets.length,
-                heightFactor: 1,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: hue,
-                    borderRadius: BorderRadius.circular(u * 1.1),
-                    boxShadow: [
-                      BoxShadow(
-                        color: hue.withValues(alpha: 0.4),
-                        blurRadius: u * 0.8,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          Row(
-            children: [
-              for (final (i, pct) in _presets.indexed)
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: busy
-                        ? null
-                        : () => _run(
-                            light,
-                            () => light.setBrightness(pct),
-                            LightState(true, pct),
-                          ),
-                    child: Center(
-                      child: Text(
-                        '$pct%',
-                        style: TextStyle(
-                          color: i == index
-                              ? Colors.black
-                              : _white.withValues(alpha: busy ? 0.3 : 0.7),
-                          fontSize: u * 0.75,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: -u * 0.02,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// The TV card, laid out as the user asked: the set-top box's big power
-  /// button first, then the TV's own (smaller) power button beside the
-  /// volume pill. Volume goes to the TV and is live only while it's on.
+  /// The TV as a slim strip (the user needs it least): its name and state,
+  /// volume −, play / pause as a gold ring (on the Hisense with a box
+  /// behind it, MEDIA_BOX — else the TV's own OK), volume +, power. A box
+  /// (Beyond, Haam's TCL) gets its own power; volume goes to the Hisense
+  /// when there is one, else to the box over ADB.
   Widget _tvCard(HisenseTv? tv, AndroidTvBox? box) {
-    final u = widget.unit;
-    final hue = _hue(_tvViolet, widget.night);
-    final boxHue = _hue(_boxBlue, widget.night);
+    final s = _s;
+    final gold = _goldFor(widget.night);
     final tvOn = tv != null && _tvOn[tv] == true;
     final tvKnown = tv != null && _tvOn.containsKey(tv);
     final boxOn = box != null && _boxOn[box] == true;
+    final boxKnown = box != null && _boxOn.containsKey(box);
     final boxProblem = box == null
         ? null
         : box.waiting
         ? 'Allow on TV'
         : _boxProblem[box];
-    final boxKnown = box != null && _boxOn.containsKey(box);
-    final r = BorderRadius.circular(u * 1.25);
-
-    // Volume goes to the Hisense when the card has one, else to the
-    // Android TV itself over ADB (a TCL on its own, say).
     final volumeLive = tv != null ? tvOn : boxOn;
-    Widget volume(IconData icon, String hisenseKey, String adbKey) => Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: !volumeLive
-            ? null
-            : tv != null
-            ? () => tv.sendKey(hisenseKey).catchError((_) {})
-            : () async {
-                try {
-                  await box!.sendKey(await _loadAdbKey(), adbKey);
-                } catch (_) {}
-              },
-        child: Icon(
-          icon,
-          size: u * 1.8,
-          color: _white.withValues(alpha: volumeLive ? 0.85 : 0.25),
-        ),
-      ),
+
+    String state(bool known, bool on, String? detail) => !known
+        ? 'CONNECTING'
+        : on
+        ? (detail ?? 'ON').toUpperCase()
+        : 'OFF';
+    final label = [
+      if (box != null)
+        '${box.name}  ·  ${boxProblem?.toUpperCase() ?? state(boxKnown, boxOn, null)}',
+      if (tv != null) '${tv.name}  ·  ${state(tvKnown, tvOn, _tvSource[tv])}',
+    ].join('   ').toUpperCase();
+
+    Widget volume(IconData icon, String hisenseKey, String adbKey) => _luxIcon(
+      icon,
+      14 * s,
+      volumeLive
+          ? _ivory.withValues(alpha: 0.8)
+          : _muted.withValues(alpha: 0.5),
+      !volumeLive
+          ? null
+          : tv != null
+          ? () => tv.sendKey(hisenseKey).catchError((_) {})
+          : () async {
+              try {
+                await box!.sendKey(await _loadAdbKey(), adbKey);
+              } catch (_) {}
+            },
+      box: 40 * s,
     );
 
-    /// A power button in [color]: filled while [on], a tinted outline off.
-    BoxDecoration button(Color color, bool on) => BoxDecoration(
-      borderRadius: r,
-      gradient: on
-          ? LinearGradient(colors: [color.withValues(alpha: 0.8), color])
-          : null,
-      color: on ? null : color.withValues(alpha: 0.06),
-      border: Border.all(color: color.withValues(alpha: on ? 0.8 : 0.18)),
-    );
-
-    final boxFg = boxOn
-        ? Colors.black
-        : boxHue.withValues(alpha: boxKnown ? 0.65 : 0.3);
-    final tvFg = tvOn
-        ? Colors.black
-        : hue.withValues(alpha: tvKnown ? 0.65 : 0.25);
-
-    /// A wide power button: the power icon, the name and a state line.
-    Widget wide({
-      required String name,
-      required String status,
-      required bool problem,
-      required Color color,
-      required bool on,
-      required Color fg,
-      required VoidCallback? onTap,
-    }) => GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        height: u * 5,
-        padding: EdgeInsets.symmetric(horizontal: u * 1.1),
-        decoration: button(color, on),
-        child: Row(
-          children: [
-            Icon(Icons.power_settings_new_rounded, size: u * 2.1, color: fg),
-            SizedBox(width: u * 0.8),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      style: TextStyle(
-                        color: fg,
-                        fontSize: u * 1.05,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    status,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: problem
-                          ? _red
-                          : on
-                          ? Colors.black.withValues(alpha: 0.65)
-                          : _white.withValues(alpha: 0.45),
-                      fontSize: u * 0.78,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    return _GlowCard(
-      hue: boxOn || !tvOn ? boxHue : hue,
-      on: tvOn || boxOn,
-      unit: u,
-      width: widget.width,
+    return _LuxCard(
+      height: 48 * s,
+      radius: 24 * s,
+      lit: tvOn || boxOn ? gold : null,
+      padding: EdgeInsets.only(left: 18 * s, right: 4 * s),
       child: Row(
         children: [
-          if (box != null) ...[
-            Expanded(
-              child: wide(
-                name: box.name,
-                status:
-                    boxProblem ??
-                    (!boxKnown
-                        ? 'Connecting…'
-                        : boxOn
-                        ? 'On'
-                        : 'Off'),
-                problem: boxProblem != null,
-                color: boxHue,
-                on: boxOn,
-                fg: boxFg,
-                onTap: boxKnown ? () => _toggleBox(box) : null,
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _caps(
+                9.5 * s,
+                color: boxProblem != null ? _red : _muted,
+                spacing: 0.28,
               ),
             ),
-            SizedBox(width: u * 0.6),
-          ],
-          // A TV on its own gets the wide button; beside a box, a square.
-          if (tv != null && box == null) ...[
-            Expanded(
-              child: wide(
-                name: tv.name,
-                status: !tvKnown
-                    ? 'Connecting…'
-                    : tvOn
-                    ? (_tvSource[tv] ?? 'On')
-                    : 'Off',
-                problem: false,
-                color: hue,
-                on: tvOn,
-                fg: tvFg,
-                onTap: tvKnown ? () => _toggleTv(tv) : null,
-              ),
-            ),
-            SizedBox(width: u * 0.6),
-          ],
-          if (tv != null && box != null) ...[
-            // The TV itself: a small square — TV icon over power.
+          ),
+          volume(Icons.remove, 'KEY_VOLUMEDOWN', 'KEYCODE_VOLUME_DOWN'),
+          // OK / play-pause, on the Hisense on its own (M&M's Room) only —
+          // the user asked for it there and nowhere else (9 Nov 2026).
+          if (tv != null && box == null)
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: tvKnown ? () => _toggleTv(tv) : null,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                width: u * 5,
-                height: u * 5,
-                decoration: button(hue, tvOn),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.tv_rounded, size: u * 1.7, color: tvFg),
-                    Icon(
-                      Icons.power_settings_new_rounded,
-                      size: u * 1.2,
-                      color: tvFg,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SizedBox(width: u * 0.6),
-          ],
-          // OK, as on the remote — pauses / plays what's on. Only the
-          // Hisense on its own (M&M's Room); the user asked for it there
-          // and nowhere else (9 Nov 2026).
-          if (tv != null && box == null) ...[
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              // Play / pause on the box behind the TV when there is one
-              // (MEDIA_BOX); else the TV's own OK.
               onTap: !tvOn
                   ? null
                   : _mediaBoxes[tv.name] != null
@@ -5672,147 +4485,42 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                     }
                   : () => tv.sendKey('KEY_OK').catchError((_) {}),
               child: Container(
-                width: u * 5,
-                height: u * 5,
-                alignment: Alignment.center,
+                width: 36 * s,
+                height: 36 * s,
+                margin: EdgeInsets.symmetric(horizontal: 4 * s),
                 decoration: BoxDecoration(
-                  color: _surface,
-                  borderRadius: r,
-                  border: Border.all(color: _surfaceEdge),
-                ),
-                child: Text(
-                  'OK',
-                  style: TextStyle(
-                    color: _white.withValues(alpha: tvOn ? 0.85 : 0.25),
-                    fontSize: u * 1.2,
-                    fontWeight: FontWeight.w500,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: tvOn ? gold : gold.withValues(alpha: 0.35),
                   ),
+                ),
+                child: Icon(
+                  Icons.play_arrow_outlined,
+                  size: 16 * s,
+                  color: tvOn ? gold : gold.withValues(alpha: 0.35),
                 ),
               ),
             ),
-            SizedBox(width: u * 0.6),
-          ],
-          if (tv != null || box != null)
-            Container(
-              width: u * 9,
-              height: u * 5,
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: r,
-                border: Border.all(color: _surfaceEdge),
-              ),
-              child: Row(
-                children: [
-                  volume(
-                    Icons.remove_rounded,
-                    'KEY_VOLUMEDOWN',
-                    'KEYCODE_VOLUME_DOWN',
-                  ),
-                  Icon(
-                    Icons.volume_up_rounded,
-                    size: u * 1.2,
-                    color: (tv != null ? hue : boxHue).withValues(
-                      alpha: volumeLive ? 0.8 : 0.25,
-                    ),
-                  ),
-                  volume(
-                    Icons.add_rounded,
-                    'KEY_VOLUMEUP',
-                    'KEYCODE_VOLUME_UP',
-                  ),
-                ],
-              ),
+          volume(Icons.add, 'KEY_VOLUMEUP', 'KEYCODE_VOLUME_UP'),
+          if (box != null)
+            _luxIcon(
+              Icons.power_settings_new_rounded,
+              16 * s,
+              boxOn ? gold : _muted,
+              boxKnown ? () => _toggleBox(box) : null,
+              box: 40 * s,
+            ),
+          if (tv != null)
+            _luxIcon(
+              box != null
+                  ? Icons.tv_outlined
+                  : Icons.power_settings_new_rounded,
+              16 * s,
+              tvOn ? gold : _muted,
+              tvKnown ? () => _toggleTv(tv) : null,
+              box: 40 * s,
             ),
         ],
-      ),
-    );
-  }
-
-  /// The foot of the panel (from the user's mock-up): the network on the
-  /// left — green while the devices answer — and on the right "All systems
-  /// nominal", or which devices stopped answering.
-  Widget _statusLine() {
-    final down = [
-      for (final l in widget.lights)
-        if (_offline.contains(l)) l.name,
-      for (final ac in widget.acs)
-        if (_acOffline.contains(ac)) ac.name,
-    ];
-    final total = widget.lights.length + widget.acs.length;
-    return _StatusBar(
-      unit: widget.unit,
-      night: widget.night,
-      connected: !(total > 0 && down.length == total),
-      checking: down.isEmpty && widget.lights.any((l) => _states[l] == null),
-      down: down,
-    );
-  }
-
-  /// A scene button: GN deep navy with a lavender moon, GM a glowing
-  /// amber-to-orange sunrise (from the user's mock-up).
-  Widget _pill(
-    IconData icon,
-    String label, {
-    required bool night,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    final u = widget.unit;
-    final amber = _hue(_warm, widget.night);
-    final fg = night
-        ? const Color(0xFFB9B4FF)
-        : Colors.black.withValues(alpha: 0.85);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: enabled ? onTap : null,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 300),
-        opacity: enabled ? 1 : 0.4,
-        child: Container(
-          height: u * 2.6,
-          padding: EdgeInsets.symmetric(horizontal: u * 0.9),
-          decoration: BoxDecoration(
-            gradient: night
-                ? null
-                : LinearGradient(
-                    colors: [
-                      amber,
-                      Color.lerp(amber, const Color(0xFFFF6A1A), 0.4)!,
-                    ],
-                  ),
-            color: night ? const Color(0xE60D1030) : null,
-            border: Border.all(
-              color: night
-                  ? const Color(0x664A4A9A)
-                  : _white.withValues(alpha: 0.25),
-            ),
-            borderRadius: BorderRadius.circular(u * 1.3),
-            boxShadow: night || widget.night
-                ? null
-                : [
-                    BoxShadow(
-                      color: amber.withValues(alpha: 0.35),
-                      blurRadius: u * 1.0,
-                    ),
-                  ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: u * 1.2, color: fg),
-              SizedBox(width: u * 0.4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: fg,
-                  fontSize: u * 0.8,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: u * 0.04,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -5871,8 +4579,6 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
   /// A setpoint being dialled in, sent once the user stops moving it.
   int? _pending;
 
-  /// The setpoint when a press-and-hold on the dial started.
-  int? _dialFrom;
   Timer? _poll;
   Timer? _send;
 
@@ -5961,356 +4667,102 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final u = widget.unit;
+    // Mock-up pixels to this panel's size (see _LightsPanelState._s).
+    final s = widget.unit / (411 * 0.034);
     final night = widget.night;
-    final width = widget.width;
-    final height = widget.wide ? u * 10.5 : width * 1.3;
+    final gold = _goldFor(night);
     final state = _state;
     final on = state?.on == true;
     final temp = _pending ?? state?.setTemp ?? 24;
     final mode = state?.mode ?? 1;
-    final hue = _hue(_acModeHues.elementAtOrNull(mode) ?? _acCool, night);
     final room = state?.roomTemp;
-    final pad = u * 1.1;
-    // The dial takes the middle: what's left of the height between the
-    // header (the power circle) and the − / + row, capped by the width.
-    final dialSize = widget.wide
-        ? (height - 2 * pad) / 0.86
-        : min(
-            width - 2 * pad,
-            (height - 2 * pad - u * 3.2 - u * 2.6 - u * 0.8) / 0.86,
-          );
-
-    // The badge: the mode while on, otherwise why there isn't one.
-    final (badgeText, badgeIcon, badgeColor) = _offline
-        ? ('Offline', Icons.wifi_off_rounded, _red)
+    final roomText = room == null ? '' : '  ·  ROOM $room°';
+    final status = _offline
+        ? 'OFFLINE'
         : state == null
-        ? ('Connecting…', null, _white.withValues(alpha: 0.5))
-        : !on
-        ? ('Off', null, _white.withValues(alpha: 0.5))
-        : (
-            _acModeNames.elementAtOrNull(mode) ?? 'On',
-            _acModeIcons.elementAtOrNull(mode),
-            hue,
-          );
-
-    Widget roundButton(IconData icon, VoidCallback onTap) => GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        width: u * 2.6,
-        height: u * 2.6,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: _surface,
-          border: Border.all(color: _surfaceEdge),
-        ),
-        child: Icon(icon, size: u * 1.3, color: _white.withValues(alpha: 0.85)),
-      ),
-    );
-
-    final title = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          widget.ac.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: _white.withValues(alpha: on ? 0.95 : 0.7),
-            fontSize: u * 1.05,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        SizedBox(height: u * 0.3),
-        Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: u * 0.5,
-            vertical: u * 0.15,
-          ),
-          decoration: BoxDecoration(
-            color: badgeColor.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(u),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (badgeIcon != null) ...[
-                Icon(badgeIcon, size: u * 0.8, color: badgeColor),
-                SizedBox(width: u * 0.25),
-              ],
-              Text(
-                badgeText,
-                style: TextStyle(
-                  color: badgeColor,
-                  fontSize: u * 0.7,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-
-    // Power, a circle in the mode's colour while on.
-    final power = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _busy || state == null ? null : _togglePower,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        width: u * 3.2,
-        height: u * 3.2,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: on ? hue : hue.withValues(alpha: 0.06),
-          border: Border.all(color: hue.withValues(alpha: on ? 1 : 0.25)),
-          boxShadow: on
-              ? [BoxShadow(color: hue.withValues(alpha: 0.45), blurRadius: u)]
-              : null,
-        ),
-        child: _busy
-            ? Padding(
-                padding: EdgeInsets.all(u * 0.9),
-                child: CircularProgressIndicator(
-                  strokeWidth: u * 0.15,
-                  color: on ? Colors.black : _white,
-                ),
-              )
-            : Icon(
-                Icons.power_settings_new_rounded,
-                size: u * 1.6,
-                color: on ? Colors.black : hue.withValues(alpha: 0.6),
-              ),
-      ),
-    );
-
-    // The dial: press and hold, then slide up for warmer, down for
-    // cooler — a degree per step, with a tick each. (Plain drags and
-    // taps used to set it, and fired by accident.)
-    final dial = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onLongPressStart: (_) {
-        HapticFeedback.selectionClick();
-        _dialFrom = temp;
-      },
-      onLongPressMoveUpdate: (d) {
-        final from = _dialFrom;
-        if (from == null) return;
-        final t = (from - d.offsetFromOrigin.dy / (u * 1.4)).round();
-        if (t.clamp(acMinTemp, acMaxTemp) != temp) {
-          HapticFeedback.selectionClick();
-        }
-        _dial(t);
-      },
-      onLongPressEnd: (_) => _dialFrom = null,
-      child: SizedBox(
-        width: dialSize,
-        height: dialSize * 0.86,
-        child: CustomPaint(
-          painter: _DialPainter(
-            value: (temp - acMinTemp) / (acMaxTemp - acMinTemp),
-            // Cold to hot along the arc, so its colour is the setting.
-            colors: [
-              for (final c in _dialStops)
-                on ? _hue(c, night) : _white.withValues(alpha: 0.3),
-            ],
-            unit: u * 0.5,
-          ),
-          // The box is cut off below the arc, so its middle sits above
-          // the circle's; pad the top to centre the readout in the ring.
-          child: Padding(
-            padding: EdgeInsets.only(top: dialSize * 0.14),
-            child: Center(
-              child: Text(
-                '$temp°',
-                style: TextStyle(
-                  color: _white.withValues(alpha: on ? 1 : 0.5),
-                  fontSize: u * 2.4,
-                  fontWeight: FontWeight.w400,
-                  letterSpacing: -u * 0.05,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final roomTemp = room == null
-        ? const SizedBox()
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.thermostat_rounded,
-                size: u * 0.9,
-                color: _white.withValues(alpha: 0.5),
-              ),
-              Text(
-                widget.wide ? 'Room $room°' : '$room°',
-                style: TextStyle(
-                  color: _white.withValues(alpha: 0.6),
-                  fontSize: u * 0.8,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          );
-
-    final minus = roundButton(Icons.remove_rounded, () => _dial(temp - 1));
-    final plus = roundButton(Icons.add_rounded, () => _dial(temp + 1));
-
-    return _GlowCard(
-      hue: hue,
-      on: on,
-      unit: u,
-      width: width,
-      height: height,
+        ? 'CONNECTING'
+        : on
+        ? '${(_acModeNames.elementAtOrNull(mode) ?? 'On').toUpperCase()}$roomText'
+        : 'OFF$roomText';
+    final live = state != null && !_busy;
+    final ink = _muted.withValues(alpha: live ? 1 : 0.5);
+    // One wide row (the luxury look): the label, the AC's name and state,
+    // then − setpoint + and power. The round dial went with it.
+    return _LuxCard(
+      width: widget.width,
+      height: 76 * s,
+      radius: 20 * s,
+      lit: on && !_offline ? gold : null,
       alert: _offline,
-      child: widget.wide
-          ? Row(
+      padding: EdgeInsets.only(left: 18 * s, right: 4 * s),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [title, const Spacer(), roomTemp],
+                Text('AIR CON', style: _caps(9.5 * s, spacing: 0.32)),
+                SizedBox(height: 3 * s),
+                Text(
+                  widget.ac.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: _ivory,
+                    fontSize: 14 * s,
+                    fontWeight: FontWeight.w400,
+                    height: 1.2,
                   ),
                 ),
-                SizedBox(width: u * 0.6),
-                dial,
-                SizedBox(width: u * 0.6),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      power,
-                      const Spacer(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          minus,
-                          SizedBox(width: u * 0.6),
-                          plus,
-                        ],
-                      ),
-                    ],
+                SizedBox(height: 3 * s),
+                Text(
+                  status,
+                  maxLines: 1,
+                  style: _caps(
+                    9 * s,
+                    color: _offline
+                        ? _red
+                        : on
+                        ? gold
+                        : _muted,
+                    spacing: 0.25,
                   ),
-                ),
-              ],
-            )
-          : Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: title),
-                    power,
-                  ],
-                ),
-                const Spacer(),
-                dial,
-                const Spacer(),
-                Row(
-                  children: [
-                    minus,
-                    Expanded(child: Center(child: roomTemp)),
-                    plus,
-                  ],
                 ),
               ],
             ),
+          ),
+          _luxIcon(
+            Icons.remove,
+            15 * s,
+            ink,
+            live ? () => _dial(temp - 1) : null,
+          ),
+          SizedBox(
+            width: 62 * s,
+            child: Text(
+              '$temp°',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: _jost,
+                fontWeight: FontWeight.w300,
+                fontSize: 34 * s,
+                height: 1,
+                color: on ? _ivory : _ivory.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+          _luxIcon(Icons.add, 15 * s, ink, live ? () => _dial(temp + 1) : null),
+          _luxIcon(
+            Icons.power_settings_new_rounded,
+            17 * s,
+            on ? gold : ink,
+            live ? _togglePower : null,
+          ),
+        ],
+      ),
     );
   }
-}
-
-/// The 270° setpoint arc: a faint track, the set part shaded through
-/// [colors] cold to hot, a ring of ticks inside it, and a glowing knob at
-/// the setpoint.
-class _DialPainter extends CustomPainter {
-  _DialPainter({required this.value, required this.colors, required this.unit});
-
-  final double value;
-  final List<Color> colors;
-  final double unit;
-
-  /// The colour at [f] (0–1) along [colors].
-  Color _at(double f) {
-    final x = f.clamp(0.0, 1.0) * (colors.length - 1);
-    final i = min(x.floor(), colors.length - 2);
-    return Color.lerp(colors[i], colors[i + 1], x - i)!;
-  }
-
-  static const _start = 3 * pi / 4;
-  static const _sweep = 3 * pi / 2;
-  static const _ticks = 36;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.width / 2);
-    final r = size.width / 2 - unit * 0.8;
-    final rect = Rect.fromCircle(center: c, radius: r);
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = unit * 0.3;
-    canvas.drawArc(
-      rect,
-      _start,
-      _sweep,
-      false,
-      stroke..color = _white.withValues(alpha: 0.10),
-    );
-    canvas.drawArc(
-      rect,
-      _start,
-      _sweep * value,
-      false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = unit * 0.3
-        ..shader = SweepGradient(
-          endAngle: _sweep,
-          colors: colors,
-          transform: const GradientRotation(_start),
-        ).createShader(rect),
-    );
-
-    final tick = Paint()
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = unit * 0.16;
-    for (var i = 0; i <= _ticks; i++) {
-      final f = i / _ticks;
-      final a = _start + _sweep * f;
-      final dir = Offset(cos(a), sin(a));
-      tick.color = f <= value + 1e-6
-          ? _at(f).withValues(alpha: 0.85)
-          : _white.withValues(alpha: 0.12);
-      canvas.drawLine(
-        c + dir * (r - unit * 1.2),
-        c + dir * (r - unit * (i % 3 == 0 ? 2.1 : 1.7)),
-        tick,
-      );
-    }
-
-    final knobColor = _at(value);
-    final knob =
-        c +
-        Offset(cos(_start + _sweep * value), sin(_start + _sweep * value)) * r;
-    canvas.drawCircle(
-      knob,
-      unit * 0.9,
-      Paint()
-        ..color = knobColor.withValues(alpha: 0.4)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, unit * 0.6),
-    );
-    canvas.drawCircle(knob, unit * 0.6, Paint()..color = knobColor);
-  }
-
-  @override
-  bool shouldRepaint(_DialPainter old) =>
-      old.value != value || !listEquals(old.colors, colors) || old.unit != unit;
 }
 
 /// The holiday line's red, in every mode and in standby (the user asked,

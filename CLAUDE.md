@@ -463,6 +463,47 @@ app builds fine but the lights panel silently disappears.
 - Don't press keys on these boxes from the Mac without saying so — the
   user noticed and asked what was going on.
 
+## Luxury look (`luxury` branch, 10 Nov 2026)
+
+The user sent a photo of an e-ink tablet home screen, liked its layout in
+OLED black, then asked for it "very luxury and premium" and approved a
+mock-up (Design canvas https://claude.ai/artifact/W5u1RAUbA4yhLcRonk25Sz,
+"Luxury · Phone" / "Luxury · iPad"). Built on the `luxury` branch of both
+repos; `main` keeps the glass look below. On this branch it overrides
+"Look" where they differ:
+
+- Palette (lib/luxury.dart, a `part` of main.dart): pure black, ivory
+  `_ivory` #EDE6DA, muted `_muted` #8E877C, one accent `_gold` #C8A97E
+  (`_goldFor(night)` → night red). No glass, glow or drawn sky (the
+  `_Backdrop` / `_Sky` / lightbox / dial code was deleted here).
+  `_LuxCard`: near-black fill and a 1 px "brushed metal" gradient edge,
+  gold-tinted when `lit`, red on `alert`. Labels are `_caps` (Inter,
+  small, letter-spaced capitals).
+- Face: room name top-left, date caps, the time in **Jost ExtraLight**
+  (fonts/Jost-*.ttf, OFL) — ivory, slate in night mode — the holiday line
+  in red on the hairline, then Meteocons + temperature (Jost Light) +
+  draw · ≈ MVR. Then `_LuxPicture`: the clip (sunny / night / rainy; the
+  forest on the home page) in a strip that fades into the black — only
+  the picture follows the weather, the screen never goes light (the user
+  asked). After dark it's a **greyscale still** (`assets/video/<clip>.jpg`,
+  a frame made with ffmpeg; gitignored like the clips) — the user asked.
+  Gone in standby.
+- Priority (the user): lights most, then AC, then TV. Panel: LIGHTS with
+  NIGHT / MORNING (GN / GM) as text, big light tiles two to a row (tap =
+  on/off *and* picks it for the dimmer; press-and-hold the Yeelight for
+  the kelvin sheet), the dimmer row (`_dimmerRow`: the light's name in
+  gold — tap to move to the next dimmable light — and 1 · 25 · 50 · 100,
+  the nearest underlined in gold; a level turns it on), Sonoff tiles three
+  to a row, each AC as one row (`AcPanel`: "AIR CON" — the user's label —
+  name, state, − setpoint + power; the round dial is gone), the TV as a
+  slim strip (− , gold play/pause ring = the OK/MEDIA_BOX button, +,
+  power). No status line.
+- Rooms are text tabs along the foot (`_roomTabs`, gold dot under the
+  active one; HOME first); they replaced the header's house button.
+  Locked rooms still go through the PinPad. The home page keeps its house
+  view and cards, flattened (`_Look(standby: true)`) on black.
+- Sizes are the mock-up's px × `s` (short side / 411).
+
 ## Look (Oct 2026 redesign)
 
 - Times of day (the user proposed night 20–06 / morning 06–12 /
