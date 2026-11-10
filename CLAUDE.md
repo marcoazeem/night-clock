@@ -576,7 +576,7 @@ repos; `main` keeps the glass look below. On this branch it overrides
   clip's player, `NCPanelPage.standby` fades the frost (UIVisualEffectView
   blur) out and the tiles draw `drawCardStyle(…, flat)`, `NCFaceView`
   keeps the Lottie icon playing, and the backlight drops to `kStandbyBrightness`
-  (0.2 on the luxury branch — raised from 0.12 so the date reads; the date is Inter Medium 15 pt there and turns ivory in standby, the user asked) — an LCD doesn't care about black, so there it's the backlight
+  (0.2 on the luxury branch — raised from 0.12 so the date reads; the date is Inter Medium 15 pt there and turns ivory in standby, and the time goes bright red at night / gold by day in Jost Light while dimmed — the user asked) — an LCD doesn't care about black, so there it's the backlight
   and the idle GPU that save power. Outside standby the iPad's backlight
   is capped at `kMaxBrightness` 0.4 (the user asked for ~40% always; the
   press-and-hold still dims below it).
