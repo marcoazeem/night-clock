@@ -571,6 +571,17 @@ app builds fine but the lights panel silently disappears.
   digits left the clock small and the user asked for it bigger (Oct
   2026). On its side the card goes under the clock. Its right edge keeps the clock's
   old margin, clear of the dead top-right patch.
+- **Holidays (iPad only, 10 Nov 2026)**: a line under the date names the
+  next Maldives public holiday within 15 days (`kHolidayDays`): "REPUBLIC
+  DAY  ·  TOMORROW" / "TODAY" / "IN 5 DAYS", in the clock's font and
+  colour at 0.75 alpha, smaller than the date (`kHolidaySize` 0.11),
+  nothing when none is near. `NCHolidays` (Common.m) reads Google's public
+  calendar `en.mv#holiday@group.v.calendar.google.com` (basic.ics, no
+  key; it follows the moon-sighted Islamic dates and marks later ones
+  "(tentative)", stripped), at most every 12 h alongside the weather, and
+  keeps the "yyyyMMdd=Name" list in NSUserDefaults for offline. The user
+  asked for it on the iPad only: the phone's face is too crowded; don't
+  port it.
 - Preview other times with dart-defines `FORCE_NIGHT`, `FORCE_MORNING`,
   `FORCE_RAIN`, `FORCE_CLEAR` (ignores live rain) (=true). Always reinstall a plain build afterwards — the
   user once saw a forced-morning sun at night mid-test.
