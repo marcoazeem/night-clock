@@ -487,7 +487,13 @@ repos; `main` keeps the glass look below. On this branch it overrides
   the picture follows the weather, the screen never goes light (the user
   asked). After dark it's a **greyscale still** (`assets/video/<clip>.jpg`,
   a frame made with ffmpeg; gitignored like the clips) — the user asked.
-  Gone in standby.
+  Gone in standby. **The picture runs behind the face** (the user asked):
+  faint behind the date and time, full under the weather, dim at its foot
+  where the bill sits *inside* it ("ENERGY  1.0 KW · ≈ MVR … THIS BILL" —
+  moved there from beside the temperature); `_LuxPicture(stops, alphas)`.
+  The iPad does the same over its whole clock column
+  (`-[NCSkyView setFadeLocations:alphas:]`, `fadeRight` for the column's
+  edge), with its bill graph inside the foot.
 - Priority (the user): lights most, then AC, then TV. Panel: LIGHTS with
   NIGHT / MORNING (GN / GM) as text, big light tiles two to a row (tap =
   on/off *and* picks it for the dimmer; press-and-hold the Yeelight for

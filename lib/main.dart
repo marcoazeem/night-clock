@@ -694,22 +694,6 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                             color: clockColor,
                           ),
                         ),
-                        if (watts != null) ...[
-                          SizedBox(width: 14 * s),
-                          Container(
-                            width: 1,
-                            height: 18 * s,
-                            color: const Color(0xFF2A2723),
-                          ),
-                          SizedBox(width: 14 * s),
-                          Text(
-                            [
-                              _kw(watts),
-                              if (bill != null) '≈ MVR ${_mvr(bill)}',
-                            ].join('  ·  ').toUpperCase(),
-                            style: _caps(10 * s, spacing: 0.22),
-                          ),
-                        ],
                       ],
                     ),
                   ],
@@ -732,12 +716,45 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                         style: _caps(11 * s, spacing: 0.32),
                       ),
                     );
-              final picture = _LuxPicture(
-                clip: clip,
-                standby: _standby,
-                night: night,
-                still: night || _isDark(_now),
-              );
+              // The bill, inside the foot of the picture (the user asked).
+              final energyLine = watts == null
+                  ? null
+                  : Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4 * s),
+                      child: Row(
+                        children: [
+                          Text('ENERGY', style: _caps(9.5 * s, spacing: 0.32)),
+                          const Spacer(),
+                          Text(
+                            [
+                              _kw(watts),
+                              if (bill != null) '≈ MVR ${_mvr(bill)}',
+                            ].join('  ·  ').toUpperCase(),
+                            style: _caps(
+                              10 * s,
+                              color: _ivory.withValues(alpha: 0.85),
+                              spacing: 0.2,
+                            ),
+                          ),
+                          if (bill != null)
+                            Text(
+                              '  THIS BILL',
+                              style: _caps(9.5 * s, spacing: 0.25),
+                            ),
+                        ],
+                      ),
+                    );
+              // The picture runs behind the date and time, faint there so
+              // they read, full under the weather, dim behind the bill.
+              Widget picture(double timeEnd, double solid, double shade) =>
+                  _LuxPicture(
+                    clip: clip,
+                    standby: _standby,
+                    night: night,
+                    still: night || _isDark(_now),
+                    stops: [0, timeEnd, solid, shade, 0.93, 1],
+                    alphas: [0, 0.22, 1, 1, energyLine == null ? 0.1 : 0.3, 0],
+                  );
               final tabs = _rooms.length > 1 ? _roomTabs(s, night) : null;
               final unit = barSpan * 0.034;
 
@@ -754,8 +771,21 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                         children: [
                           header,
                           SizedBox(height: 8 * s),
-                          face,
-                          Expanded(child: picture),
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                Positioned.fill(child: picture(0.3, 0.55, 0.8)),
+                                Column(
+                                  children: [
+                                    face,
+                                    const Spacer(),
+                                    ?energyLine,
+                                    SizedBox(height: 8 * s),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -786,8 +816,26 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                       child: header,
                     ),
                     SizedBox(height: 14 * s),
-                    face,
-                    SizedBox(height: 112 * s, child: picture),
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned(
+                          left: -(driftX + pad),
+                          right: -(driftX + pad),
+                          top: 0,
+                          bottom: 0,
+                          child: picture(0.3, 0.6, 0.8),
+                        ),
+                        Column(
+                          children: [
+                            face,
+                            SizedBox(height: 92 * s),
+                            ?energyLine,
+                            SizedBox(height: 12 * s),
+                          ],
+                        ),
+                      ],
+                    ),
                     Expanded(
                       child: SingleChildScrollView(
                         child: _panel(

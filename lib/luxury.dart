@@ -148,7 +148,13 @@ class _LuxPicture extends StatelessWidget {
     required this.standby,
     required this.night,
     required this.still,
+    this.stops = const [0, 0.32, 0.66, 1],
+    this.alphas = const [0, 1, 1, 0],
   });
+
+  /// The fade down the picture: [alphas] at [stops].
+  final List<double> stops;
+  final List<double> alphas;
 
   final String clip;
   final bool standby;
@@ -187,25 +193,20 @@ class _LuxPicture extends StatelessWidget {
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 1500),
         // Each child fills the strip (the default centres them loosely).
-        layoutBuilder: (current, previous) => Stack(
-          fit: StackFit.expand,
-          children: [...previous, ?current],
-        ),
+        layoutBuilder: (current, previous) =>
+            Stack(fit: StackFit.expand, children: [...previous, ?current]),
         child: standby || const bool.fromEnvironment('NO_VIDEO')
             ? const SizedBox.expand(key: ValueKey('none'))
             : ShaderMask(
                 key: ValueKey('$clip/$still'),
                 blendMode: BlendMode.dstIn,
-                shaderCallback: (r) => const LinearGradient(
+                shaderCallback: (r) => LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.transparent,
-                    Colors.black,
-                    Colors.black,
-                    Colors.transparent,
+                    for (final a in alphas) Colors.black.withValues(alpha: a),
                   ],
-                  stops: [0, 0.32, 0.66, 1],
+                  stops: stops,
                 ).createShader(r),
                 child: Opacity(
                   opacity: night ? 0.45 : (still ? 0.7 : 0.8),
