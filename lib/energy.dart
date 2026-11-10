@@ -77,8 +77,19 @@ int configuredBillDay() =>
 
 /// Everything the dashboard can't see, as a steady draw (ENERGY_BASELINE_W,
 /// default 400 W ≈ 9.6 kWh a day: fridge, water heater, pumps, the rest).
+/// The fridge and the water heater are named inside it ([fridgeWatts],
+/// [waterHeaterWatts]); the rest is "Other".
 double configuredBaseline() =>
     double.tryParse(const String.fromEnvironment('ENERGY_BASELINE_W')) ?? 400;
+
+/// The fridge, a Haier HRB-2763CKG-E (256 L, 3 star; 234 kWh a year on its
+/// label ≈ 27 W), as its average — a little over the label for Malé's heat.
+const fridgeWatts = 32.0;
+
+/// The water heater, a Midea D15-20VA (15 L, 2 kW), left on all day (the
+/// user, 10 Nov 2026): keeping 15 L hot and reheating after showers comes
+/// to about 2.5 kWh a day.
+const waterHeaterWatts = 104.0;
 
 // ── Draw ─────────────────────────────────────────────────────────────────
 
@@ -110,10 +121,17 @@ class Draw {
     this.acs = 0,
     this.lights = 0,
     this.screens = 0,
+    this.appliances = 0,
     required this.other,
   });
-  final double acs, lights, screens, other;
-  double get total => acs + lights + screens + other;
+
+  /// [appliances]: the fridge and water heater, always counted.
+  final double acs, lights, screens, appliances, other;
+  double get total => acs + lights + screens + appliances + other;
+
+  /// What's drawn with everything switchable off: the fridge, the heater
+  /// and the rest.
+  double get unseen => appliances + other;
 }
 
 // ── The running count ────────────────────────────────────────────────────
@@ -209,7 +227,7 @@ class EnergyMeter {
       // then just the baseline, as the ACs may well have been switched off.
       final secs = now.difference(last).inSeconds.toDouble();
       final atLast = min(secs, 7200.0);
-      final kwh = (_lastWatts * atLast + draw.other * (secs - atLast)) / 3.6e6;
+      final kwh = (_lastWatts * atLast + draw.unseen * (secs - atLast)) / 3.6e6;
       periodKwh += kwh;
       dayKwh += kwh;
     }

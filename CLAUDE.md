@@ -274,7 +274,14 @@ app builds fine but the lights panel silently disappears.
   Bedroom and Haam's 12k, AC 2 in the Sitting Room 24k) × 45–100% by how
   far the room is from the setpoint, fan mode 45 W; a bulb 9 W × level;
   a TV 100 W, a box 12 W; plus `ENERGY_BASELINE_W` (400) for everything
-  unseen. kWh add up per day and per billing period (from `BILL_DAY`, 14 —
+  unseen. The fridge and water heater are named *inside* that 400 W
+  (10 Nov 2026, the user gave the models): a Haier HRB-2763CKG-E (256 L,
+  3 star, 234 kWh a year → `fridgeWatts` 32 W for Malé's heat) and a Midea
+  D15-20VA (15 L, 2 kW, left on all day ≈ 2.5 kWh a day →
+  `waterHeaterWatts` 104 W); "Other" is the remaining 264 W, so the total —
+  and the bill projection tuned with it — is unchanged. `Draw.appliances`,
+  shown as "Fridge & heater" in the home card's split (iPad:
+  `applianceWatts`). kWh add up per day and per billing period (from `BILL_DAY`, 14 —
   the new apartment's bills come mid-month),
   saved in prefs ('energy'); a gap counts the last draw for 2 h, then the
   baseline. The first run fills the period's untracked start at last

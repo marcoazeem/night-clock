@@ -2849,7 +2849,8 @@ class EnergyTracker extends ChangeNotifier {
       acs: acW,
       lights: lightW,
       screens: tvOn * tvWatts + boxOn * boxWatts,
-      other: _baseline,
+      appliances: fridgeWatts + waterHeaterWatts,
+      other: max(0, _baseline - fridgeWatts - waterHeaterWatts),
     );
     meter.add(now, draw!);
     _prefs?.setString('energy', meter.toJson());
@@ -3165,6 +3166,7 @@ class _EnergyCardState extends State<_EnergyCard> {
                 part(_acCool, 'ACs', draw.acs),
                 part(_warm, 'Lights', draw.lights),
                 part(_tvViolet, 'Screens', draw.screens),
+                part(_gold, 'Fridge & heater', draw.appliances),
                 part(const Color(0xFF9AA0AA), 'Other', draw.other),
               ],
             ),
