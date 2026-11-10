@@ -799,7 +799,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                                 style: dateStyle.copyWith(
                                   fontSize: digitSize * 0.085,
                                   letterSpacing: digitSize * 0.006,
-                                  color: clockColor.withValues(alpha: 0.75),
+                                  color: _holidayRed,
                                 ),
                               ),
                             ),
@@ -6312,3 +6312,7 @@ class _DialPainter extends CustomPainter {
   bool shouldRepaint(_DialPainter old) =>
       old.value != value || !listEquals(old.colors, colors) || old.unit != unit;
 }
+
+/// The holiday line's red, in every mode and in standby (the user asked,
+/// 10 Nov 2026).
+const _holidayRed = Color(0xFFFF4A3D);

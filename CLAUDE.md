@@ -574,7 +574,7 @@ app builds fine but the lights panel silently disappears.
 - **Holidays (10 Nov 2026)**: a line under the date names the
   next Maldives public holiday within 15 days (`kHolidayDays`): "REPUBLIC
   DAY  ·  TOMORROW" / "TODAY" / "IN 5 DAYS", in the clock's font and
-  colour at 0.75 alpha, smaller than the date (`kHolidaySize` 0.11),
+  red (0xFFFF4A3D, every mode and standby — the user asked), smaller than the date (`kHolidaySize` 0.11),
   nothing when none is near. `NCHolidays` (Common.m) reads Google's public
   calendar `en.mv#holiday@group.v.calendar.google.com` (basic.ics, no
   key; it follows the moon-sighted Islamic dates and marks later ones
