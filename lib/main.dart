@@ -836,7 +836,7 @@ class _ClockScreenState extends State<ClockScreen> with WidgetsBindingObserver {
                         Column(
                           children: [
                             face,
-                            SizedBox(height: 92 * s),
+                            SizedBox(height: 34 * s),
                             ?energyLine,
                             SizedBox(height: 12 * s),
                           ],
@@ -4520,7 +4520,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
 
     Widget volume(IconData icon, String hisenseKey, String adbKey) => _luxIcon(
       icon,
-      14 * s,
+      19 * s,
       volumeLive
           ? _ivory.withValues(alpha: 0.8)
           : _muted.withValues(alpha: 0.5),
@@ -4533,12 +4533,12 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                 await box!.sendKey(await _loadAdbKey(), adbKey);
               } catch (_) {}
             },
-      box: 40 * s,
+      box: 54 * s,
     );
 
     return _LuxCard(
-      height: 48 * s,
-      radius: 24 * s,
+      height: 62 * s,
+      radius: 31 * s,
       lit: tvOn || boxOn ? gold : null,
       padding: EdgeInsets.only(left: 18 * s, right: 4 * s),
       child: Row(
@@ -4576,8 +4576,8 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                     }
                   : () => tv.sendKey('KEY_OK').catchError((_) {}),
               child: Container(
-                width: 36 * s,
-                height: 36 * s,
+                width: 48 * s,
+                height: 48 * s,
                 margin: EdgeInsets.symmetric(horizontal: 4 * s),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -4587,7 +4587,7 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
                 ),
                 child: Icon(
                   Icons.play_arrow_outlined,
-                  size: 16 * s,
+                  size: 21 * s,
                   color: tvOn ? gold : gold.withValues(alpha: 0.35),
                 ),
               ),
@@ -4595,20 +4595,20 @@ class _LightsPanelState extends State<LightsPanel> with WidgetsBindingObserver {
           if (box != null)
             _luxIcon(
               Icons.power_settings_new_rounded,
-              16 * s,
+              21 * s,
               boxOn ? gold : _muted,
               boxKnown ? () => _toggleBox(box) : null,
-              box: 40 * s,
+              box: 54 * s,
             ),
           if (tv != null)
             _luxIcon(
               box != null
                   ? Icons.tv_outlined
                   : Icons.power_settings_new_rounded,
-              16 * s,
+              21 * s,
               tvOn ? gold : _muted,
               tvKnown ? () => _toggleTv(tv) : null,
-              box: 40 * s,
+              box: 54 * s,
             ),
         ],
       ),
@@ -4780,7 +4780,7 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
     // then − setpoint + and power. The round dial went with it.
     return _LuxCard(
       width: widget.width,
-      height: 76 * s,
+      height: 96 * s,
       radius: 20 * s,
       lit: on && !_offline ? gold : null,
       alert: _offline,
@@ -4806,17 +4806,21 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
                   ),
                 ),
                 SizedBox(height: 3 * s),
-                Text(
-                  status,
-                  maxLines: 1,
-                  style: _caps(
-                    9 * s,
-                    color: _offline
-                        ? _red
-                        : on
-                        ? gold
-                        : _muted,
-                    spacing: 0.25,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    status,
+                    maxLines: 1,
+                    style: _caps(
+                      9 * s,
+                      color: _offline
+                          ? _red
+                          : on
+                          ? gold
+                          : _muted,
+                      spacing: 0.25,
+                    ),
                   ),
                 ),
               ],
@@ -4824,30 +4828,38 @@ class _AcPanelState extends State<AcPanel> with WidgetsBindingObserver {
           ),
           _luxIcon(
             Icons.remove,
-            15 * s,
+            20 * s,
             ink,
             live ? () => _dial(temp - 1) : null,
+            box: 58 * s,
           ),
           SizedBox(
-            width: 62 * s,
+            width: 70 * s,
             child: Text(
               '$temp°',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: _jost,
                 fontWeight: FontWeight.w300,
-                fontSize: 34 * s,
+                fontSize: 40 * s,
                 height: 1,
                 color: on ? _ivory : _ivory.withValues(alpha: 0.6),
               ),
             ),
           ),
-          _luxIcon(Icons.add, 15 * s, ink, live ? () => _dial(temp + 1) : null),
+          _luxIcon(
+            Icons.add,
+            20 * s,
+            ink,
+            live ? () => _dial(temp + 1) : null,
+            box: 58 * s,
+          ),
           _luxIcon(
             Icons.power_settings_new_rounded,
-            17 * s,
+            22 * s,
             on ? gold : ink,
             live ? _togglePower : null,
+            box: 58 * s,
           ),
         ],
       ),

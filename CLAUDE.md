@@ -526,6 +526,10 @@ repos; `main` keeps the glass look below. On this branch it overrides
   Locked rooms still go through the PinPad. The home page keeps its house
   view and cards, flattened (`_Look(standby: true)`) on black.
 - Sizes are the mock-up's px × `s` (short side / 411).
+- Phone, 14 Nov 2026 (the user, half awake, couldn't hit them): the gap
+  under the weather shrank (34·s) so the picture sits behind the clock and
+  the cards rise; the AC row is 96·s tall (− / + / power 58·s targets,
+  setpoint 40·s), the TV strip 62·s (54·s targets, 48·s play ring).
 
 ## Look (Oct 2026 redesign)
 
